@@ -1,0 +1,62 @@
+@import "tailwindcss";
+@config "../tailwind.config.js";
+
+:root {
+  --navy-deep: #0D1B2A;
+  --navy-dark: #1B263B;
+  --primary: #415A77;
+  --accent: #778DA9;
+  --off-white: #E0E1DD;
+  
+  font-family: 'Space Grotesk', system-ui, Avenir, Helvetica, Arial, sans-serif;
+  line-height: 1.5;
+  font-weight: 400;
+  
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+@layer base {
+  body {
+    @apply font-sans bg-[var(--off-white)] dark:bg-[var(--navy-deep)] text-slate-800 dark:text-slate-200;
+    margin: 0;
+    padding: 0;
+  }
+}
+
+.glass-panel {
+    background: rgba(255, 255, 255, 0.85);
+    backdrop-filter: blur(12px);
+    border: 1px solid rgba(255, 255, 255, 0.3)
+}
+
+.dark .glass-panel {
+    background: rgba(13, 27, 42, 0.85);
+    border: 1px solid rgba(65, 90, 119, 0.2)
+}
+
+.custom-scrollbar::-webkit-scrollbar {
+    width: 5px
+}
+
+.custom-scrollbar::-webkit-scrollbar-track {
+    background: transparent
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb {
+    background: #415A77;
+    border-radius: 10px
+}
+
+.hero-banner {
+    background-image: linear-gradient(to right, rgba(13, 27, 42, 0.9), rgba(13, 27, 42, 0.4)), url(https://lh3.googleusercontent.com/aida-public/AB6AXuDIJ8V9wyY1wYqjdY-2X152F3ot_Ig9kJbdSMrT-tIcRaL6udZKoztCv92oaRiij0iW5bRSnWR17kWpw64TySf9ZYDkMG6ZUg4DTtEsvgwOYHBhSeDwX_wNY7fD7RONE4FgXTwFhgyIXYLHgAT3yfj8hqmyson49yGFkGH77O-EJDiOd6eHdb4T0BJ1iDDCfX2u0rjMzwjVpwLQbhAyD5oEVIKTWnPT5nN4A7ltZXzoLsVnd0A3CJCwc1GvEYGvdCsSHGqypv3zvLdG);
+    background-size: cover;
+    background-position: center
+}
+
+.texture-overlay {
+    background-image: url(https://lh3.googleusercontent.com/aida-public/AB6AXuDhReMseGPLQhPCNEXNrfjwvX-OQfDP23nJuDtU_AnTGHMfYa6iEfwgEMIvwFAPC8sO7qoJyuHrPdvGdhOx6v7Of8m2dzKq24fwAlza6ApKcGLdAA3tE9n83tOvUdTaHkyiUm9t-5cdd-xNTbcF5QQCOEpY3AgwMzsII4WGRx7IFV9eiGJimIl5QU9q4zTYFckE2_z_v7PVZqiDdLoVIhwl03yJ9UPX_2J3vms_yJmXk2275UmH7X9jxsLn9nsb0papH1I6wuiDr5LC);
+    opacity: 0.03
+}
