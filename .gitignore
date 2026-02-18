@@ -20,3 +20,7 @@ dist-ssr/
 
 # Vite
 *.log
+
+# Google OAuth Secrets
+backend/app/models/token.json
+backend/app/models/credentials.json

@@ -1,20 +1,15 @@
-from sqlalchemy import Column, Integer, String, Enum
+from sqlalchemy import Column, Integer, String
 from app.config.database import Base
-import enum
 
-class UserRole(str, enum.Enum):
-    ta = "ta"
-    hm = "hm"
-    rl = "rl"
-    hp = "hp"
-    other = "other"
 
 class User(Base):
     __tablename__ = "users"
 
     id = Column(Integer, primary_key=True, index=True)
-    full_name = Column(String)
-    email = Column(String, unique=True, index=True)
-    company_name = Column(String)
-    role = Column(String) # Storing as string for simplicity or UserRole enum
-    hashed_password = Column(String)
+    name = Column(String, nullable=False)
+    email = Column(String, unique=True, index=True, nullable=False)
+    # Keeping existing fields but making them optional or manageable if they exist in the DB
+    company_name = Column(String, nullable=True)
+    role = Column(String, nullable=True)
+    hashed_password = Column(String, nullable=True)
+

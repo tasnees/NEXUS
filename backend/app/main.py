@@ -9,9 +9,10 @@ Base.metadata.create_all(bind=engine)
 app = FastAPI(title="HireAI Backend")
 
 # CORS Configuration
+# Note: When allow_credentials=True, allow_origins cannot be ["*"]
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"], # Adjust in production
+    allow_origins=["http://localhost:5173"], # Explicitly allow frontend origin
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
