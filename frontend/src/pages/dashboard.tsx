@@ -1,6 +1,65 @@
-import React from 'react';
+import React, { useState } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
 
 const Dashboard: React.FC = () => {
+    const navigate = useNavigate();
+    const [isModalOpen, setIsModalOpen] = useState(false);
+    const [isSubmitting, setIsSubmitting] = useState(false);
+    const [formData, setFormData] = useState({
+        title: '',
+        company: '',
+        salary: '',
+        timePerWeek: '',
+        nature: 'hybrid',
+        requirements: '',
+        description: '',
+        tags: ''
+    });
+
+    const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
+        const { name, value } = e.target;
+        setFormData(prev => ({ ...prev, [name]: value }));
+    };
+
+    const handleSubmit = async (e: React.FormEvent) => {
+        e.preventDefault();
+        setIsSubmitting(true);
+        try {
+            const response = await fetch('https://hook.eu1.make.com/wyv5w8y6awvl56u2y5a253680ndkrqyx', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    ...formData,
+                    postedAt: new Date().toISOString(),
+                    status: 'Live',
+                    tags: formData.tags.split(',').map(tag => tag.trim())
+                }),
+            });
+            if (response.ok) {
+                setIsModalOpen(false);
+                setFormData({
+                    title: '',
+                    company: '',
+                    salary: '',
+                    timePerWeek: '',
+                    nature: 'hybrid',
+                    requirements: '',
+                    description: '',
+                    tags: ''
+                });
+                // Small delay to let the modal animation finish if any
+                setTimeout(() => alert('🚀 Job Posting Successfully Dispatched to NEXUS Pipeline!'), 100);
+            } else {
+                alert('Failed to post job. Please try again.');
+            }
+        } catch (error) {
+            console.error('Error posting job:', error);
+            alert('An error occurred while connecting to the NEXUS pipeline.');
+        } finally {
+            setIsSubmitting(false);
+        }
+    };
+
     return (
         <div className="flex min-h-screen overflow-hidden">
             {/* Sidebar */}
@@ -14,26 +73,26 @@ const Dashboard: React.FC = () => {
                 </div>
                 <nav className="flex-1 px-6 mt-4 space-y-1 relative z-10">
                     <p className="px-4 py-2 text-[10px] font-bold text-accent uppercase tracking-[0.2em] mb-2">Main Menu</p>
-                    <a href="#" className="flex items-center gap-3 px-4 py-3 bg-primary text-white rounded-xl shadow-lg shadow-primary/20">
+                    <Link to="/dashboard" className="flex items-center gap-3 px-4 py-3 bg-primary text-white rounded-xl shadow-lg shadow-primary/20">
                         <span className="material-symbols-outlined">dashboard</span>
                         <span className="font-semibold text-sm">Dashboard</span>
-                    </a>
-                    <a href="#" className="flex items-center gap-3 px-4 py-3 hover:bg-white/5 transition-all rounded-xl group">
+                    </Link>
+                    <Link to="/jobs" className="flex items-center gap-3 px-4 py-3 hover:bg-white/5 transition-all rounded-xl group">
                         <span className="material-symbols-outlined text-accent group-hover:text-white transition-colors">work</span>
                         <span className="text-sm font-medium">Job Postings</span>
-                    </a>
-                    <a href="#" className="flex items-center gap-3 px-4 py-3 hover:bg-white/5 transition-all rounded-xl group">
+                    </Link>
+                    <Link to="/candidates" className="flex items-center gap-3 px-4 py-3 hover:bg-white/5 transition-all rounded-xl group">
                         <span className="material-symbols-outlined text-accent group-hover:text-white transition-colors">groups</span>
                         <span className="text-sm font-medium">Candidates</span>
-                    </a>
-                    <a href="#" className="flex items-center gap-3 px-4 py-3 hover:bg-white/5 transition-all rounded-xl group">
+                    </Link>
+                    <Link to="#" className="flex items-center gap-3 px-4 py-3 hover:bg-white/5 transition-all rounded-xl group">
                         <span className="material-symbols-outlined text-accent group-hover:text-white transition-colors">psychology</span>
                         <span className="text-sm font-medium">AI Training</span>
-                    </a>
-                    <a href="#" className="flex items-center gap-3 px-4 py-3 hover:bg-white/5 transition-all rounded-xl group">
+                    </Link>
+                    <Link to="#" className="flex items-center gap-3 px-4 py-3 hover:bg-white/5 transition-all rounded-xl group">
                         <span className="material-symbols-outlined text-accent group-hover:text-white transition-colors">analytics</span>
                         <span className="text-sm font-medium">Insights</span>
-                    </a>
+                    </Link>
                 </nav>
                 <div className="p-6 border-t border-white/5 relative z-10">
                     <div className="bg-gradient-to-br from-[#1B263B] to-[#0D1B2A] rounded-2xl p-4 mb-6 border border-white/5 shadow-inner">
@@ -85,7 +144,10 @@ const Dashboard: React.FC = () => {
                                     type="text"
                                 />
                             </div>
-                            <button className="bg-primary hover:bg-primary/90 text-white px-6 py-3 rounded-xl text-sm font-bold flex items-center gap-2 shadow-xl transition-all transform hover:-translate-y-0.5">
+                            <button 
+                                onClick={() => setIsModalOpen(true)}
+                                className="bg-primary hover:bg-primary/90 text-white px-6 py-3 rounded-xl text-sm font-bold flex items-center gap-2 shadow-xl transition-all transform hover:-translate-y-0.5"
+                            >
                                 <span className="material-symbols-outlined text-xl">add_circle</span>
                                 Post New Job
                             </button>
@@ -154,7 +216,12 @@ const Dashboard: React.FC = () => {
                                         <span className="material-symbols-outlined text-primary">contract</span>
                                         <h2 className="text-xl font-display font-bold text-slate-800">Active AI-Driven Postings</h2>
                                     </div>
-                                    <button className="text-primary text-sm font-bold hover:underline underline-offset-4 tracking-tight">View All Pipeline</button>
+                                    <button 
+                                        onClick={() => navigate('/jobs')}
+                                        className="text-primary text-sm font-bold hover:underline underline-offset-4 tracking-tight"
+                                    >
+                                        View All Pipeline
+                                    </button>
                                 </div>
                                 <div className="divide-y divide-slate-50">
                                     {/* Job Item 1 */}
@@ -287,7 +354,10 @@ const Dashboard: React.FC = () => {
                                             </div>
                                         </div>
                                     </div>
-                                    <button className="w-full mt-8 bg-primary hover:bg-primary/90 text-white font-bold py-3 rounded-xl text-sm transition-all shadow-lg shadow-primary/20">
+                                    <button 
+                                        onClick={() => navigate('/sentiment-analysis')}
+                                        className="w-full mt-8 bg-primary hover:bg-primary/90 text-white font-bold py-3 rounded-xl text-sm transition-all shadow-lg shadow-primary/20"
+                                    >
                                         Optimization Lab
                                     </button>
                                 </div>
@@ -351,7 +421,10 @@ const Dashboard: React.FC = () => {
                                         </button>
                                     </div>
                                 </div>
-                                <button className="w-full mt-8 py-3 text-xs font-bold border border-slate-100 text-slate-500 rounded-xl hover:bg-slate-50 transition-all uppercase tracking-widest">
+                                <button 
+                                    onClick={() => navigate('/candidates')}
+                                    className="w-full mt-8 py-3 text-xs font-bold border border-slate-100 text-slate-500 rounded-xl hover:bg-slate-50 transition-all uppercase tracking-widest"
+                                >
                                     View All Activity
                                 </button>
                             </div>
@@ -368,6 +441,157 @@ const Dashboard: React.FC = () => {
                     </div>
                 </div>
             </main>
+
+            {/* Post Job Modal */}
+            {isModalOpen && (
+                <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 animate-in fade-in duration-300">
+                    <div className="absolute inset-0 bg-dark-sidebar/60 backdrop-blur-sm" onClick={() => setIsModalOpen(false)}></div>
+                    <div className="relative w-full max-w-2xl bg-white dark:bg-dark-sidebar rounded-[2rem] shadow-2xl overflow-hidden border border-white/10 animate-in zoom-in-95 duration-300">
+                        <div className="absolute inset-0 texture-overlay pointer-events-none opacity-[0.05]"></div>
+                        
+                        <div className="relative p-8 border-b border-slate-100 dark:border-white/5 bg-slate-50/50 dark:bg-white/2 flex justify-between items-center">
+                            <div className="flex items-center gap-3">
+                                <div className="w-10 h-10 bg-primary rounded-xl flex items-center justify-center text-white shadow-lg shadow-primary/20">
+                                    <span className="material-symbols-outlined">rocket_launch</span>
+                                </div>
+                                <div>
+                                    <h2 className="text-xl font-display font-bold text-slate-800 dark:text-white">Post New NEXUS Job</h2>
+                                    <p className="text-xs text-slate-500 font-medium tracking-tight">Initialize AI-driven sourcing agents</p>
+                                </div>
+                            </div>
+                            <button onClick={() => setIsModalOpen(false)} className="w-8 h-8 rounded-full hover:bg-slate-200 dark:hover:bg-white/10 flex items-center justify-center text-slate-400 transition-colors">
+                                <span className="material-symbols-outlined text-xl">close</span>
+                            </button>
+                        </div>
+
+                        <form onSubmit={handleSubmit} className="relative p-8 space-y-6 max-h-[70vh] overflow-y-auto custom-scrollbar">
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                <div className="space-y-2">
+                                    <label className="text-[10px] font-bold text-slate-400 dark:text-accent uppercase tracking-widest pl-1">Job Title / Post</label>
+                                    <input 
+                                        required
+                                        name="title"
+                                        value={formData.title}
+                                        onChange={handleInputChange}
+                                        placeholder="e.g. Senior Frontend Engineer" 
+                                        className="w-full px-4 py-3 bg-slate-50 dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-xl text-sm focus:ring-2 focus:ring-primary outline-none transition-all dark:text-white"
+                                    />
+                                </div>
+                                <div className="space-y-2">
+                                    <label className="text-[10px] font-bold text-slate-400 dark:text-accent uppercase tracking-widest pl-1">Company Name</label>
+                                    <input 
+                                        required
+                                        name="company"
+                                        value={formData.company}
+                                        onChange={handleInputChange}
+                                        placeholder="e.g. Nexus AI Corp" 
+                                        className="w-full px-4 py-3 bg-slate-50 dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-xl text-sm focus:ring-2 focus:ring-primary outline-none transition-all dark:text-white"
+                                    />
+                                </div>
+                            </div>
+
+                            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                                <div className="space-y-2">
+                                    <label className="text-[10px] font-bold text-slate-400 dark:text-accent uppercase tracking-widest pl-1">Salary Range</label>
+                                    <input 
+                                        name="salary"
+                                        value={formData.salary}
+                                        onChange={handleInputChange}
+                                        placeholder="e.g. $120k - $160k" 
+                                        className="w-full px-4 py-3 bg-slate-50 dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-xl text-sm focus:ring-2 focus:ring-primary outline-none transition-all dark:text-white"
+                                    />
+                                </div>
+                                <div className="space-y-2">
+                                    <label className="text-[10px] font-bold text-slate-400 dark:text-accent uppercase tracking-widest pl-1">Time per Week</label>
+                                    <input 
+                                        name="timePerWeek"
+                                        value={formData.timePerWeek}
+                                        onChange={handleInputChange}
+                                        placeholder="e.g. 40 hrs" 
+                                        className="w-full px-4 py-3 bg-slate-50 dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-xl text-sm focus:ring-2 focus:ring-primary outline-none transition-all dark:text-white"
+                                    />
+                                </div>
+                                <div className="space-y-2">
+                                    <label className="text-[10px] font-bold text-slate-400 dark:text-accent uppercase tracking-widest pl-1">Nature</label>
+                                    <select 
+                                        name="nature"
+                                        value={formData.nature}
+                                        onChange={handleInputChange}
+                                        className="w-full px-4 py-3 bg-slate-50 dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-xl text-sm focus:ring-2 focus:ring-primary outline-none transition-all dark:text-white appearance-none"
+                                    >
+                                        <option value="onsite">Onsite</option>
+                                        <option value="online">Online / Remote</option>
+                                        <option value="hybrid">Hybrid</option>
+                                    </select>
+                                </div>
+                            </div>
+
+                            <div className="space-y-2">
+                                <label className="text-[10px] font-bold text-slate-400 dark:text-accent uppercase tracking-widest pl-1">Company Requirements</label>
+                                <textarea 
+                                    name="requirements"
+                                    value={formData.requirements}
+                                    onChange={handleInputChange}
+                                    rows={3}
+                                    placeholder="List the key requirements for the candidate..." 
+                                    className="w-full px-4 py-3 bg-slate-50 dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-xl text-sm focus:ring-2 focus:ring-primary outline-none transition-all dark:text-white"
+                                />
+                            </div>
+
+                            <div className="space-y-2">
+                                <label className="text-[10px] font-bold text-slate-400 dark:text-accent uppercase tracking-widest pl-1">Job Description</label>
+                                <textarea 
+                                    name="description"
+                                    value={formData.description}
+                                    onChange={handleInputChange}
+                                    rows={3}
+                                    placeholder="Detailed job description..." 
+                                    className="w-full px-4 py-3 bg-slate-50 dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-xl text-sm focus:ring-2 focus:ring-primary outline-none transition-all dark:text-white"
+                                />
+                            </div>
+
+                            <div className="space-y-2">
+                                <label className="text-[10px] font-bold text-slate-400 dark:text-accent uppercase tracking-widest pl-1">Skills & Tags (Comma separated)</label>
+                                <input 
+                                    name="tags"
+                                    value={formData.tags}
+                                    onChange={handleInputChange}
+                                    placeholder="React, TypeScript, AI, UI/UX" 
+                                    className="w-full px-4 py-3 bg-slate-50 dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-xl text-sm focus:ring-2 focus:ring-primary outline-none transition-all dark:text-white"
+                                />
+                            </div>
+                        </form>
+
+                        <div className="relative p-8 border-t border-slate-100 dark:border-white/5 bg-slate-50/30 dark:bg-white/1 flex gap-4">
+                            <button 
+                                type="button"
+                                onClick={() => setIsModalOpen(false)}
+                                className="flex-1 py-3 border border-slate-200 dark:border-white/10 text-slate-600 dark:text-slate-400 font-bold rounded-xl text-sm hover:bg-slate-50 dark:hover:bg-white/5 transition-all"
+                            >
+                                Cancel
+                            </button>
+                            <button 
+                                type="submit"
+                                onClick={handleSubmit}
+                                disabled={isSubmitting}
+                                className="flex-[2] bg-primary hover:bg-primary/90 text-white font-bold py-3 rounded-xl text-sm shadow-xl shadow-primary/20 transition-all flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed group"
+                            >
+                                {isSubmitting ? (
+                                    <>
+                                        <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></span>
+                                        Deploying Pipeline...
+                                    </>
+                                ) : (
+                                    <>
+                                        <span className="material-symbols-outlined text-lg group-hover:translate-x-1 group-hover:-translate-y-1 transition-transform">publish</span>
+                                        Launch Job Posting
+                                    </>
+                                )}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 };

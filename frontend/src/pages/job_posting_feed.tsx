@@ -1,5 +1,6 @@
 
 import React, { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 
 // Job Card Interface
 interface JobPosting {
@@ -16,9 +17,68 @@ interface JobPosting {
 }
 
 const JobPostingFeed: React.FC = () => {
+    const navigate = useNavigate();
+
     const [jobs, setJobs] = useState<JobPosting[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
+    const [isModalOpen, setIsModalOpen] = useState(false);
+    const [isSubmitting, setIsSubmitting] = useState(false);
+    const [formData, setFormData] = useState({
+        title: '',
+        company: '',
+        salary: '',
+        timePerWeek: '',
+        nature: 'hybrid',
+        requirements: '',
+        description: '',
+        tags: ''
+    });
+
+    const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
+        const { name, value } = e.target;
+        setFormData(prev => ({ ...prev, [name]: value }));
+    };
+
+    const handleSubmit = async (e: React.FormEvent) => {
+        e.preventDefault();
+        setIsSubmitting(true);
+        try {
+            const response = await fetch('https://hook.eu1.make.com/wyv5w8y6awvl56u2y5a253680ndkrqyx', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    ...formData,
+                    postedAt: new Date().toISOString(),
+                    status: 'Live Posting',
+                    tags: formData.tags.split(',').map(tag => tag.trim())
+                }),
+            });
+            if (response.ok) {
+                setIsModalOpen(false);
+                setFormData({
+                    title: '',
+                    company: '',
+                    salary: '',
+                    timePerWeek: '',
+                    nature: 'hybrid',
+                    requirements: '',
+                    description: '',
+                    tags: ''
+                });
+                alert('🚀 Job Posting Successfully Dispatched to NEXUS Pipeline!');
+                // Refresh jobs after a small delay
+                setTimeout(() => window.location.reload(), 1000);
+            } else {
+                alert('Failed to post job. Please try again.');
+            }
+        } catch (error) {
+            console.error('Error posting job:', error);
+            alert('An error occurred.');
+        } finally {
+            setIsSubmitting(false);
+        }
+    };
 
     // Dynamically load Google Fonts for Material Symbols if not already present
     useEffect(() => {
@@ -117,7 +177,10 @@ const JobPostingFeed: React.FC = () => {
             <main className="max-w-[1440px] mx-auto px-6 py-10 flex gap-8">
                 {/* Sidebar */}
                 <aside className="w-72 flex-shrink-0 space-y-6 hidden md:block">
-                    <button className="w-full bg-primary hover:bg-navy-deep text-white py-4 px-6 rounded-xl font-bold flex items-center justify-center gap-3 shadow-lg shadow-primary/20 transition-all group">
+                    <button 
+                        onClick={() => setIsModalOpen(true)}
+                        className="w-full bg-primary hover:bg-navy-deep text-white py-4 px-6 rounded-xl font-bold flex items-center justify-center gap-3 shadow-lg shadow-primary/20 transition-all group"
+                    >
                         <span className="material-symbols-outlined group-hover:rotate-12 transition-transform">bolt</span>
                         Post New Job (AI)
                     </button>
@@ -301,7 +364,12 @@ const JobPostingFeed: React.FC = () => {
                                             </div>
                                             <div className="flex items-center gap-3">
                                                 <button className="px-5 py-2.5 rounded-lg border border-secondary/30 text-header text-sm font-bold hover:bg-background transition-all">Manage Post</button>
-                                                <button className="px-6 py-2.5 rounded-lg bg-primary text-white text-sm font-bold hover:bg-header transition-all shadow-md shadow-primary/10">View Candidates</button>
+                                                <button 
+                                                    onClick={() => navigate('/candidates')}
+                                                    className="px-6 py-2.5 rounded-lg bg-primary text-white text-sm font-bold hover:bg-header transition-all shadow-md shadow-primary/10"
+                                                >
+                                                    View Candidates
+                                                </button>
                                             </div>
                                         </div>
                                     </div>
@@ -359,6 +427,138 @@ const JobPostingFeed: React.FC = () => {
                     </button>
                 </div>
             </div>
+
+            {/* Post Job Modal */}
+            {isModalOpen && (
+                <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 animate-in fade-in duration-300 backdrop-blur-md">
+                    <div className="absolute inset-0 bg-slate-900/40" onClick={() => setIsModalOpen(false)}></div>
+                    <div className="relative w-full max-w-2xl bg-white rounded-[2rem] shadow-2xl overflow-hidden animate-in zoom-in-95 duration-300">
+                        <div className="relative p-8 border-b border-slate-100 bg-slate-50/50 flex justify-between items-center">
+                            <div className="flex items-center gap-3">
+                                <div className="w-10 h-10 bg-primary rounded-xl flex items-center justify-center text-white shadow-lg shadow-primary/20">
+                                    <span className="material-symbols-outlined">rocket_launch</span>
+                                </div>
+                                <div>
+                                    <h2 className="text-xl font-bold text-slate-800">Launch AI Sourcing Pipeline</h2>
+                                    <p className="text-xs text-slate-500 font-medium tracking-tight">Post to LinkedIn, Indeed & NEXUS Network</p>
+                                </div>
+                            </div>
+                            <button onClick={() => setIsModalOpen(false)} className="w-8 h-8 rounded-full hover:bg-slate-200 flex items-center justify-center text-slate-400 transition-colors">
+                                <span className="material-symbols-outlined text-xl">close</span>
+                            </button>
+                        </div>
+
+                        <form onSubmit={handleSubmit} className="relative p-8 space-y-6 max-h-[70vh] overflow-y-auto custom-scrollbar">
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                <div className="space-y-2">
+                                    <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest pl-1">Job Title / Position</label>
+                                    <input 
+                                        required
+                                        name="title"
+                                        value={formData.title}
+                                        onChange={handleInputChange}
+                                        placeholder="e.g. Senior Frontend Engineer" 
+                                        className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-primary outline-none transition-all"
+                                    />
+                                </div>
+                                <div className="space-y-2">
+                                    <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest pl-1">Company Name</label>
+                                    <input 
+                                        required
+                                        name="company"
+                                        value={formData.company}
+                                        onChange={handleInputChange}
+                                        placeholder="e.g. Nexus AI Corp" 
+                                        className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-primary outline-none transition-all"
+                                    />
+                                </div>
+                            </div>
+
+                            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                                <div className="space-y-2">
+                                    <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest pl-1">Salary Range</label>
+                                    <input 
+                                        name="salary"
+                                        value={formData.salary}
+                                        onChange={handleInputChange}
+                                        placeholder="e.g. $120k - $160k" 
+                                        className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-primary outline-none transition-all"
+                                    />
+                                </div>
+                                <div className="space-y-2">
+                                    <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest pl-1">Time per Week</label>
+                                    <input 
+                                        name="timePerWeek"
+                                        value={formData.timePerWeek}
+                                        onChange={handleInputChange}
+                                        placeholder="e.g. 40 hrs" 
+                                        className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-primary outline-none transition-all"
+                                    />
+                                </div>
+                                <div className="space-y-2">
+                                    <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest pl-1">Nature</label>
+                                    <select 
+                                        name="nature"
+                                        value={formData.nature}
+                                        onChange={handleInputChange}
+                                        className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-primary outline-none transition-all appearance-none"
+                                    >
+                                        <option value="onsite">Onsite</option>
+                                        <option value="online">Online / Remote</option>
+                                        <option value="hybrid">Hybrid</option>
+                                    </select>
+                                </div>
+                            </div>
+
+                            <div className="space-y-2">
+                                <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest pl-1">Requirements</label>
+                                <textarea 
+                                    name="requirements"
+                                    value={formData.requirements}
+                                    onChange={handleInputChange}
+                                    rows={2}
+                                    placeholder="Key requirements..." 
+                                    className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-primary outline-none transition-all"
+                                />
+                            </div>
+
+                            <div className="space-y-2">
+                                <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest pl-1">Job Description</label>
+                                <textarea 
+                                    name="description"
+                                    value={formData.description}
+                                    onChange={handleInputChange}
+                                    rows={3}
+                                    placeholder="Details..." 
+                                    className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-primary outline-none transition-all"
+                                />
+                            </div>
+
+                            <div className="space-y-2">
+                                <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest pl-1">Skills & Tags</label>
+                                <input 
+                                    name="tags"
+                                    value={formData.tags}
+                                    onChange={handleInputChange}
+                                    placeholder="React, AI, Python" 
+                                    className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-primary outline-none transition-all"
+                                />
+                            </div>
+                        </form>
+
+                        <div className="p-8 border-t border-slate-100 bg-slate-50/50 flex gap-4">
+                            <button onClick={() => setIsModalOpen(false)} className="flex-1 py-3 border border-slate-200 text-slate-600 font-bold rounded-xl text-sm hover:bg-slate-100 transition-all">Cancel</button>
+                            <button 
+                                onClick={handleSubmit}
+                                disabled={isSubmitting}
+                                className="flex-[2] bg-primary text-white font-bold py-3 rounded-xl text-sm hover:bg-header transition-all flex items-center justify-center gap-2 shadow-lg shadow-primary/20 disabled:opacity-50"
+                            >
+                                {isSubmitting ? 'Optimizing Nodes...' : 'Launch Job Posting'}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 };
