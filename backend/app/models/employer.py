@@ -3,10 +3,10 @@ from app.config.database import Base
 import enum
 
 class UserRole(str, enum.Enum):
-    ta = "ta"
-    hm = "hm"
-    rl = "rl"
-    hp = "hp"
+    ta = "ta" #talent acquisition
+    hm = "hm" #hiring manager
+    rl = "rl" #recruiter
+    hp = "hp" #hiring partner
     other = "other"
 
 class User(Base):
@@ -16,5 +16,5 @@ class User(Base):
     full_name = Column(String)
     email = Column(String, unique=True, index=True)
     company_name = Column(String)
-    role = Column(String) # Storing as string for simplicity or UserRole enum
+    role = Column(String) 
     hashed_password = Column(String)

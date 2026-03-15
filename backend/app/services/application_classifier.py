@@ -16,9 +16,8 @@ def get_jobs(db: Session) -> List[Job]:
 
 def classify_application(resume_text: str, jobs: List[Job]) -> Optional[Job]:
     """
-    Classifies the application based on resume text and job descriptions.
-    Uses simple keyword matching for demonstration.
-    For production, consider using an LLM or more sophisticated NLP.
+    Classifies the application based on resume text and job descriptions
+    Uses simple keyword matching for demonstration
     """
     best_job = None
     max_score = 0
@@ -36,13 +35,13 @@ def classify_application(resume_text: str, jobs: List[Job]) -> Optional[Job]:
                 if tag.lower() in resume_text_lower:
                     score += 2 # Weight for tag match
         
-        # You could also match against job description if available
+        # match against job description if available
 
         if score > max_score:
             max_score = score
             best_job = job
     
-    # Threshold for classification (optional)
+    # Threshold for classification
     if max_score > 0:
         return best_job
     return None
