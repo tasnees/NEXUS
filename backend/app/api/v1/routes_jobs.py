@@ -3,9 +3,41 @@ from sqlalchemy.orm import Session
 from typing import List
 from app.config.database import get_db
 from app.models.job import Job
-from app.schemas.job import JobResponse
+from app.schemas.job import JobResponse, JobCreate
 
 router = APIRouter()
+
+@router.post("/", response_model=JobResponse)
+def create_job(job: JobCreate, db: Session = Depends(get_db)):
+    try:
+        location_map = {"onsite": "Onsite", "online": "Remote", "hybrid": "Hybrid"}
+        location = location_map.get(job.nature.lower(), "Remote")
+        
+        db_job = Job(
+            title=job.title,
+            company_logo="https://lh3.googleusercontent.com/aida-public/AB6AXuBXUe0dmBI_6Ahqs12jg49xCqnskPbWVbJiDJo-a8JpMvraRUoQRiVW2GPG0395sCABn0bzSPqmE4NlyGxXLNTx_YyDFK6QXj51d6Rf8aDLbxfrwWO4bUxQ_ixa3KvJaqDCBNZK5t-66FlUyxvWpYp0dOSwdLAoGZlEF5CtWnRYOC9K9L1GMnUZ9zbZnpADAd0E38c0U_DmPBkK0mMmYJzOwQ-AwpFqF1GOJethPdY5gsGaKxVbl2Z4pyv_nCU7EB_cA9aoDwjyEENM",
+            location=location,
+            posted_at="Posted just now", 
+            status=job.status,
+            applicants=0,
+            match_rate=0,
+            interviewed=0,
+            tags=job.tags,
+            company=job.company,
+            salary=job.salary,
+            time_per_week=job.timePerWeek,
+            nature=job.nature,
+            requirements=job.requirements,
+            description=job.description
+        )
+        db.add(db_job)
+        db.commit()
+        db.refresh(db_job)
+        return db_job
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        raise
 
 @router.get("/", response_model=List[JobResponse])
 def get_jobs(db: Session = Depends(get_db)):

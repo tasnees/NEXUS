@@ -13,3 +13,4 @@ google-auth-oauthlib>=0.5.0
 anthropic
 pdfplumber
 PyPDF2
+python-docx

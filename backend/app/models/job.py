@@ -14,3 +14,11 @@ class Job(Base):
     match_rate = Column(Integer, default=0)
     interviewed = Column(Integer, default=0)
     tags = Column(JSON) # Store list of tags
+    
+    # New fields appended from job posting form
+    company = Column(String, nullable=True)
+    salary = Column(String, nullable=True)
+    time_per_week = Column(String, nullable=True)
+    nature = Column(String, nullable=True)
+    requirements = Column(String, nullable=True)
+    description = Column(String, nullable=True)

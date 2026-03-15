@@ -44,17 +44,30 @@ const JobPostingFeed: React.FC = () => {
         e.preventDefault();
         setIsSubmitting(true);
         try {
-            const response = await fetch('https://hook.eu1.make.com/wyv5w8y6awvl56u2y5a253680ndkrqyx', {
+            const jobData = {
+                ...formData,
+                postedAt: new Date().toISOString(),
+                status: 'Live Posting',
+                tags: formData.tags.split(',').map(tag => tag.trim())
+            };
+
+            // Post to Automation Webhook
+            const webhookRequest = fetch('https://hook.eu1.make.com/wyv5w8y6awvl56u2y5a253680ndkrqyx', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    ...formData,
-                    postedAt: new Date().toISOString(),
-                    status: 'Live Posting',
-                    tags: formData.tags.split(',').map(tag => tag.trim())
-                }),
+                body: JSON.stringify(jobData),
             });
-            if (response.ok) {
+
+            // Post to Backend DB
+            const dbRequest = fetch('http://localhost:8001/api/v1/jobs/', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(jobData),
+            });
+
+            const [webhookResponse, dbResponse] = await Promise.all([webhookRequest, dbRequest]);
+
+            if (webhookResponse.ok && dbResponse.ok) {
                 setIsModalOpen(false);
                 setFormData({
                     title: '',
@@ -66,7 +79,7 @@ const JobPostingFeed: React.FC = () => {
                     description: '',
                     tags: ''
                 });
-                alert('🚀 Job Posting Successfully Dispatched to NEXUS Pipeline!');
+                alert('🚀 Job Posting Successfully Dispatched to NEXUS Pipeline & Database!');
                 // Refresh jobs after a small delay
                 setTimeout(() => window.location.reload(), 1000);
             } else {
@@ -94,7 +107,7 @@ const JobPostingFeed: React.FC = () => {
         // Fetch jobs from backend
         const fetchJobs = async () => {
             try {
-                const response = await fetch('http://localhost:8000/api/v1/jobs/');
+                const response = await fetch('http://localhost:8001/api/v1/jobs/');
                 if (!response.ok) throw new Error('Failed to fetch jobs');
                 const data = await response.json();
                 
