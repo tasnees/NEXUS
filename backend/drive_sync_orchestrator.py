@@ -93,15 +93,23 @@ def _build_drive_service():
         token_path = Path(OAUTH_TOKEN_PATH)
         if token_path.exists():
             creds = Credentials.from_authorized_user_file(str(token_path), SCOPES)
+        
         if not creds or not creds.valid:
             if creds and creds.expired and creds.refresh_token:
-                creds.refresh(GoogleRequest())
-            else:
+                try:
+                    creds.refresh(GoogleRequest())
+                    token_path.write_text(creds.to_json())
+                except Exception as e:
+                    log.warning("Token refresh failed (likely expired): %s. Re-authenticating...", e)
+                    creds = None
+            
+            if not creds:
                 flow = InstalledAppFlow.from_client_secrets_file(
                     OAUTH_CREDENTIALS_PATH, SCOPES
                 )
                 creds = flow.run_local_server(port=0)
-            token_path.write_text(creds.to_json())
+                token_path.write_text(creds.to_json())
+        
         log.info("Authenticated via OAuth2 (credentials.json / token.json)")
     else:
         if not Path(SERVICE_ACCOUNT_PATH).exists():
@@ -180,27 +188,52 @@ def _extract_text(file_bytes: bytes, mime_type: str, filename: str) -> str:
     return ""
 
 
+from app.config.database import SessionLocal, engine, Base
+from app.models.candidate import Candidate
+
+# Ensure tables exist
+Base.metadata.create_all(bind=engine)
+
 def _is_already_synced(drive_file_id: str) -> bool:
     """Check if a candidate record with this drive_file_id already exists."""
+    db = SessionLocal()
     try:
-        r = requests.get(CANDIDATES_ENDPOINT, timeout=10)
-        if r.ok:
-            candidates = r.json()
-            return any(c["drive_file_id"] == drive_file_id for c in candidates)
+        exists = db.query(Candidate).filter(Candidate.drive_file_id == drive_file_id).first() is not None
+        return exists
     except Exception as exc:
-        log.warning("Could not reach backend to check existing records: %s", exc)
-    return False
+        log.warning("Could not reach database to check existing records: %s", exc)
+        return False
+    finally:
+        db.close()
 
 
 def _save_to_db(payload: dict) -> Optional[dict]:
-    """POST / upsert the candidate profile to the backend API."""
+    """Upsert the candidate profile to the database directly."""
+    db = SessionLocal()
     try:
-        r = requests.post(CANDIDATES_ENDPOINT, json=payload, timeout=30)
-        r.raise_for_status()
-        return r.json()
+        existing = db.query(Candidate).filter(
+            Candidate.drive_file_id == payload["drive_file_id"]
+        ).first()
+
+        if existing:
+            for field, value in payload.items():
+                setattr(existing, field, value)
+            db.commit()
+            db.refresh(existing)
+            # Convert model to dict for backward compatibility in return
+            return {"id": existing.id, "name": existing.name, "email": existing.email}
+
+        candidate = Candidate(**payload)
+        db.add(candidate)
+        db.commit()
+        db.refresh(candidate)
+        return {"id": candidate.id, "name": candidate.name, "email": candidate.email}
     except Exception as exc:
+        db.rollback()
         log.error("Failed to save candidate to database: %s", exc)
         return None
+    finally:
+        db.close()
 
 
 # ── main pipeline ──────────────────────────────────────────────────────────────

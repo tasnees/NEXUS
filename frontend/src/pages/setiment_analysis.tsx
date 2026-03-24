@@ -34,8 +34,7 @@ const CANDIDATE_AVATAR_SMALL_1 =
 const CANDIDATE_AVATAR_SMALL_2 =
     'https://lh3.googleusercontent.com/aida-public/AB6AXuA4hp564oMK22XSOKSU_UfwM9ghOV6f8NEjoXq9fbKa5miLwtYtmpX29xaGu6tfrjQuJIBpR_8Qr0pyAKDihUwpi24zD9GnT3l2kmW3RRxGch8vVMaxT_KjaQ7eRlpofEhTFtzTQ3EglzuLieNrszN1PbZDLBprDUcrIFDz3UJwjsg_2oDyUNoHSiWoO3E4RbqEtaxWUsnKh8WWXCTxHhuFm0nV10TeS7Oll2Ts9IQyKewtcHnFw9ZL5G-Xx1iq-mKAw1WMnZAPnfc7';
 
-const HR_AVATAR =
-    'https://lh3.googleusercontent.com/aida-public/AB6AXuBnIw3aP8yfX9JekrlUq6ns7FMY8WA3bAdFvLObAVCWHIQfYCtkQtyMc7lJDorlDWcNm43H_dzOVQODa37WzvQBZNFoz2s1spjPhCjFHkbuLLKAyIhI1MZxK06i2Lj896pXREBOKotZXHChoAKdiVJIDd3irqhkv-eNRnaV8cGnf1dryJ23IwgCLVeJSHHR9ae12LR7yozraofYh2Lbv4WgdMjeYb2UcvanfVLJjgfnW-k6kVy6UziOyPiSSIhBWDQX0GMC0kG5aJYC';
+
 
 const TRANSCRIPT_MESSAGES: TranscriptMessage[] = [
     {
@@ -234,76 +233,9 @@ const SentimentAnalysis: React.FC = () => {
 
     return (
         <div
-            className="relative flex h-auto min-h-screen w-full flex-col overflow-x-hidden bg-[#f0f1f0]"
+            className="flex-1 flex flex-col w-full bg-[#f0f1f0]"
             style={{ fontFamily: "'Space Grotesk', sans-serif" }}
         >
-            {/* ─── Top Navigation Bar ─── */}
-            <header className="flex items-center justify-between whitespace-nowrap border-b border-solid border-primary/10 bg-white px-10 py-3 sticky top-0 z-50">
-                <div className="flex items-center gap-8">
-                    <div className="flex items-center gap-3 text-primary">
-                        <div className="w-6 h-6">
-                            <svg fill="none" viewBox="0 0 48 48" xmlns="http://www.w3.org/2000/svg">
-                                <path
-                                    d="M4 42.4379C4 42.4379 14.0962 36.0744 24 41.1692C35.0664 46.8624 44 42.2078 44 42.2078L44 7.01134C44 7.01134 35.068 11.6577 24.0031 5.96913C14.0971 0.876274 4 7.27094 4 7.27094L4 42.4379Z"
-                                    fill="currentColor"
-                                />
-                            </svg>
-                        </div>
-                        <h2 className="text-slate-800 text-xl font-extrabold leading-tight tracking-tight">
-                            NEXUS AI
-                        </h2>
-                    </div>
-                    <nav className="hidden md:flex items-center gap-6">
-                        <Link
-                            className="text-slate-800/70 hover:text-primary text-sm font-semibold transition-colors"
-                            to="/candidates"
-                        >
-                            Candidates
-                        </Link>
-                        <Link
-                            className="text-slate-800/70 hover:text-primary text-sm font-semibold transition-colors"
-                            to="/jobs"
-                        >
-                            Jobs
-                        </Link>
-                        <Link
-                            className="text-primary text-sm font-bold border-b-2 border-primary pb-1"
-                            to="/sentiment-analysis"
-                        >
-                            Analytics
-                        </Link>
-                        <Link
-                            className="text-slate-800/70 hover:text-primary text-sm font-semibold transition-colors"
-                            to="#"
-                        >
-                            Settings
-                        </Link>
-                    </nav>
-                </div>
-                <div className="flex flex-1 justify-end gap-4 items-center">
-                    <label className="hidden lg:flex flex-col min-w-40 h-10 max-w-64">
-                        <div className="flex w-full flex-1 items-stretch rounded-lg h-full bg-off-white/50">
-                            <div className="text-primary/60 flex items-center justify-center pl-3">
-                                <span className="material-symbols-outlined text-[20px]">search</span>
-                            </div>
-                            <input
-                                className="flex w-full min-w-0 flex-1 border-none bg-transparent focus:ring-0 text-sm font-medium placeholder:text-slate-800/40 outline-none"
-                                placeholder="Search insights..."
-                                type="text"
-                            />
-                        </div>
-                    </label>
-                    <button className="flex items-center gap-2 rounded-lg h-10 px-4 bg-primary text-white text-sm font-bold hover:bg-primary/90 transition-all shadow-sm active:scale-95">
-                        <span className="material-symbols-outlined text-sm">ios_share</span>
-                        <span>Export Report</span>
-                    </button>
-                    <div
-                        className="bg-center bg-no-repeat aspect-square bg-cover rounded-full w-10 h-10 border-2 border-primary/20"
-                        style={{ backgroundImage: `url("${HR_AVATAR}")` }}
-                    />
-                </div>
-            </header>
-
             {/* ─── Main Content ─── */}
             <main className="flex-1 flex flex-col max-w-[1440px] mx-auto w-full px-4 md:px-10 py-6">
                 {/* Breadcrumbs */}

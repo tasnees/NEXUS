@@ -24,51 +24,26 @@ class ExtractedDocument(BaseModel):
 
 def extract_resume_fields(resume_text: str) -> CandidateProfile:
     """
-    Uses Claude to extract structured resume fields from raw resume text.
+    Tries heuristic extraction (regex/keywords) from PDFExtractor.
+    If an Anthropic API Key is eventually provided, we can re-enable AI extraction here.
     """
-    client = anthropic.Anthropic()
-
-    prompt = f"""You are a resume parser. Extract the following fields from the resume below and return ONLY a valid JSON object — no explanation, no markdown.
-
-Fields to extract:
-- name: Full name of the candidate
-- email: Email address
-- phone: Phone number
-- skills: List of technical and soft skills
-- experience: List of work experience entries (each as a string: "Title at Company (dates): description")
-- education: List of education entries (each as a string: "Degree in Field, Institution (year)")
-- summary: A brief professional summary if present, otherwise null
-
-Resume:
-\"\"\"
-{resume_text}
-\"\"\"
-
-Return only this JSON structure:
-{{
-  "name": "...",
-  "email": "...",
-  "phone": "...",
-  "skills": ["...", "..."],
-  "experience": ["...", "..."],
-  "education": ["...", "..."],
-  "summary": "..."
-}}"""
-
-    message = client.messages.create(
-        model="claude-sonnet-4-20250514",
-        max_tokens=1024,
-        messages=[{"role": "user", "content": prompt}],
+    from app.services.pdf_extractor import PDFExtractor
+    
+    # Use the existing PDFExtractor heuristic logic
+    extractor = PDFExtractor()
+    data = extractor.extract_key_fields(resume_text)
+    
+    # Map dictionary to CandidateProfile model
+    return CandidateProfile(
+        name=data.get("name"),
+        email=data.get("email"),
+        phone=data.get("phone"),
+        # Heuristics return strings, CandidateProfile expects Lists for these:
+        skills=[data.get("skills")] if data.get("skills") else [],
+        experience=[data.get("experience")] if data.get("experience") else [],
+        education=[data.get("education")] if data.get("education") else [],
+        summary=data.get("summary")
     )
-
-    raw = message.content[0].text.strip()
-
-    # Strip markdown code fences if present
-    raw = re.sub(r"^```(?:json)?\s*", "", raw)
-    raw = re.sub(r"\s*```$", "", raw)
-
-    data = json.loads(raw)
-    return CandidateProfile(**data)
 
 
 def process_document(filename: str, content: str, metadata: Optional[dict] = None) -> ExtractedDocument:

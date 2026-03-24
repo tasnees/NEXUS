@@ -11,6 +11,7 @@ class CandidateBase(BaseModel):
     skills:     List[str] = []
     experience: List[str] = []
     education:  List[str] = []
+    applied_job: Optional[str] = None
 
 
 class CandidateCreate(CandidateBase):

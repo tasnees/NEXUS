@@ -12,7 +12,46 @@ router = APIRouter()
 @router.get("/", response_model=List[CandidateResponse])
 def list_candidates(db: Session = Depends(get_db)):
     """Return all candidate profiles."""
-    return db.query(Candidate).order_by(Candidate.created_at.desc()).all()
+    candidates = db.query(Candidate).order_by(Candidate.created_at.desc()).all()
+    
+    # If no candidates exist, return demo data to seed the DB
+    if not candidates:
+        demo_candidates = [
+            {
+                "drive_file_id": "demo_1",
+                "filename": "maya_sterling_cv.pdf",
+                "name": "Maya Sterling",
+                "email": "maya.s@neural.ai",
+                "skills": ["Python", "PyTorch", "Node.js"],
+                "summary": "AI Architect with 10+ years of experience.",
+                "applied_job": "Principal Neural Architect"
+            },
+            {
+                "drive_file_id": "demo_2",
+                "filename": "lex_corvus_cv.pdf",
+                "name": "Lex Corvus",
+                "email": "lex@cyber.io",
+                "skills": ["Rust", "WASM", "Distributed Systems"],
+                "summary": "Systems engineer specializing in high-performance computing.",
+                "applied_job": "Senior MLOps Engineer"
+            },
+            {
+                "drive_file_id": "demo_3",
+                "filename": "sara_oak_cv.pdf",
+                "name": "Sara Oak",
+                "email": "sara@green.tech",
+                "skills": ["React", "TypeScript", "D3.js"],
+                "summary": "Frontend lead and data visualization expert.",
+                "applied_job": "Director of Product (Gen AI)"
+            }
+        ]
+        for data in demo_candidates:
+            c = Candidate(**data)
+            db.add(c)
+        db.commit()
+        candidates = db.query(Candidate).order_by(Candidate.created_at.desc()).all()
+        
+    return candidates
 
 
 @router.get("/{candidate_id}", response_model=CandidateResponse)
