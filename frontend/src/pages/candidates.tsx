@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import React, { useState, useEffect } from 'react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 
 // --- Types ---
 interface Candidate {
@@ -20,57 +20,7 @@ interface FilterState {
 }
 
 // --- Constants ---
-const CANDIDATES_DATA: Candidate[] = [
-    {
-        id: 1,
-        name: 'Alex Rivers',
-        role: 'Senior React Developer',
-        avatar: 'https://lh3.googleusercontent.com/aida-public/AB6AXuD0M_Av47fsC0SjDJNL1SA8UuUSkzYELITSCaRo7fl0LEX8oKAAwGwmhPj1h6y05ccpxTByPFrXUyXAyWDJGpwLLc_u7AXIZpjClK9Uxs7aAmobmEIg5jbSFzuj30VHDALw8w8Z-Ux-73R64OhrDRRnh_LC41V7r1OGpIsb-oJmhdBRS2fsMacU2duxzwukC93gkpSQ_6W_dRCgTSssecMQaWS9n2E1vMJnbTcHqu1BKoCkjRSM7Vj6e3_KCfcZ6BVgKq6KRw43I5ch',
-        aiScore: 92,
-        quizScore: 98,
-        quizBadge: 'Top 1%',
-        sentiment: 'highly_positive',
-        status: 'shortlisted',
-    },
-    {
-        id: 2,
-        name: 'Maya Sterling',
-        role: 'Frontend Engineer',
-        avatar: 'https://lh3.googleusercontent.com/aida-public/AB6AXuAPFOLYYFpq-0cB7vTq_Gl-xE2TVqPdpLtN0YHZfKTKntdI5gIORrlFSgqvSqnaKfpY1n1LheRw0g_Nqg4JcrGjrhA1k5yHISRg_iarN22WwesXtWYZySWTo_WWstM4Db3PJWItwuC_cOFVLzevjFCcMNWuRsS3Ff91dTo7-uWD3ohY6yLoha4n5rWJnOWtJ6QIsPFtHkXXMHshZDduvdhyvqPh82OmjbmhY2FMqmdx9ofW3ntDHYffJKQ2f8BmvVCdmYPPyAm8qFDz',
-        aiScore: 84,
-        quizScore: 88,
-        sentiment: 'positive',
-        status: 'interviewed',
-    },
-    {
-        id: 3,
-        name: 'Jordan Chen',
-        role: 'Junior Frontend Dev',
-        avatar: 'https://lh3.googleusercontent.com/aida-public/AB6AXuC3b0JIMjSVsq8_y_ZB3goyLdBIXruUsv4FqJMd7ju5cVxUdOI0rSdNpPOrMKUUBZDpV6rAIS3BRFOxEltLBubgNIfR3T99vwsqqYc89YxrGqRTvWGRYMTSxHgiGo-Rf_dX792vsrS6mPteHzAVztJOjA2pU_XPS20_v7U0Q77_CogQv6ZXdFz1WwIse0MhCPaCjg3g20nr0rVmoeQmuy2OcMGypVS0dAETXwwZOyXvAjtUZ5idl6zZcYdfFLGN3PtxCpjKyuOsPsiE',
-        aiScore: 68,
-        quizScore: 72,
-        sentiment: 'neutral',
-        status: 'new',
-    },
-    {
-        id: 4,
-        name: 'Elena Petrova',
-        role: 'Fullstack Engineer',
-        avatar: 'https://lh3.googleusercontent.com/aida-public/AB6AXuBJsYP3yhvwmpoTLm2pP2E8rVd026QY6dEDGEKted4R02NeDstvou302vYS1eNI7Y5fTKaHpnXS10Q-AVve2zjcFec3oUmkz7Ti8T80JKW9F5-m_zy1MAHHTNNmAyDtsARhHO_Qq7RoUhG2j6uu_628tVqrBMzGHUXxiRWYb5-_poguVTqK8cNoo715eDvfnbMxQL6htIaZ50F2qcvP7fzJj0ZidefLBJKsObPSFdNreXvJIMPovgc71eKAE1YBe8OzsirWS1sFdzRV',
-        aiScore: 89,
-        quizScore: 94,
-        sentiment: 'highly_positive',
-        status: 'interviewed',
-    },
-];
 
-const SIDEBAR_NAV_ITEMS = [
-    { icon: 'dashboard', label: 'Dashboard', href: '/dashboard', active: false },
-    { icon: 'work', label: 'Jobs', href: '/jobs', active: false },
-    { icon: 'group', label: 'Candidates', href: '/candidates', active: true },
-    { icon: 'chat_bubble', label: 'Interviews', href: '#', active: false },
-    { icon: 'analytics', label: 'Reports', href: '#', active: false },
-];
 
 // --- Helper Components ---
 
@@ -214,20 +164,60 @@ const StatusBadge: React.FC<{ status: Candidate['status'] }> = ({ status }) => {
 
 const Candidates: React.FC = () => {
     const navigate = useNavigate();
+    const [searchParams] = useSearchParams();
+    const jobFilter = searchParams.get('job');
+    
+    const [candidates, setCandidates] = useState<Candidate[]>([]);
+    const [loading, setLoading] = useState(true);
     const [filters, setFilters] = useState<FilterState>({
         search: '',
-        activeRoleFilter: 'Frontend Engineer',
+        activeRoleFilter: jobFilter,
     });
+
+    useEffect(() => {
+        // ... (rest of useEffect)
+        const fetchCandidates = async () => {
+            try {
+                const response = await fetch('http://localhost:8001/api/v1/candidates/');
+                if (!response.ok) throw new Error('Failed to fetch');
+                const data = await response.json();
+                
+                // Map DB schema to UI schema
+                const mapped: Candidate[] = data.map((c: any) => ({
+                    id: c.id,
+                    name: c.name || "Anonymous",
+                    role: c.skills?.[0] || "Applicant", // Use first skill as role for now
+                    avatar: `https://ui-avatars.com/api/?name=${encodeURIComponent(c.name || 'A')}&background=random`,
+                    aiScore: 70 + (c.skills?.length || 0) * 2, // Heuristic score
+                    quizScore: 75,
+                    sentiment: 'positive' as const,
+                    status: 'new' as const,
+                }));
+                
+                setCandidates(mapped);
+            } catch (err) {
+                console.error("Fetch error:", err);
+            } finally {
+                setLoading(false);
+            }
+        };
+        fetchCandidates();
+    }, []);
 
     const [currentPage, setCurrentPage] = useState<number>(1);
 
-    const filteredCandidates = CANDIDATES_DATA.filter((c) => {
+    const filteredCandidates = candidates.filter((c) => {
         const matchesSearch =
             !filters.search ||
             c.name.toLowerCase().includes(filters.search.toLowerCase()) ||
             c.role.toLowerCase().includes(filters.search.toLowerCase());
 
-        return matchesSearch;
+        const matchesRole =
+            !filters.activeRoleFilter ||
+            c.role.toLowerCase().includes(filters.activeRoleFilter.toLowerCase()) ||
+            filters.activeRoleFilter.toLowerCase().includes(c.role.toLowerCase());
+
+        return matchesSearch && matchesRole;
     });
 
     const handleClearFilters = () => {
@@ -235,71 +225,12 @@ const Candidates: React.FC = () => {
     };
 
     return (
-        <div className="flex h-screen overflow-hidden bg-[#f0f1f0]" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>
-            {/* ─── Sidebar Navigation ─── */}
-            <aside className="w-64 bg-white border-r border-accent/20 flex flex-col h-full shadow-sm">
-                {/* Logo */}
-                <div className="p-6 flex items-center gap-3">
-                    <div className="bg-primary rounded-lg p-2 text-white shadow-lg shadow-primary/20">
-                        <span className="material-symbols-outlined text-2xl">auto_awesome</span>
-                    </div>
-                    <div className="flex flex-col">
-                        <h1 className="text-slate-800 text-lg font-extrabold leading-tight tracking-tight">NEXUS AI</h1>
-                        <p className="text-accent text-xs font-medium uppercase tracking-wider">Hiring Portal</p>
-                    </div>
-                </div>
-
-                {/* Nav Items */}
-                <nav className="flex-1 mt-4">
-                    <div className="px-3 space-y-1">
-                        {SIDEBAR_NAV_ITEMS.map((item) => (
-                            <Link
-                                key={item.label}
-                                to={item.href}
-                                className={`flex items-center gap-3 px-4 py-3 rounded-lg transition-all duration-200 ${
-                                    item.active
-                                        ? 'bg-primary/10 text-primary border-r-4 border-primary rounded-r-none font-bold'
-                                        : 'text-accent hover:bg-primary/5 hover:text-primary font-semibold'
-                                }`}
-                            >
-                                <span
-                                    className="material-symbols-outlined"
-                                    style={item.active ? { fontVariationSettings: "'FILL' 1" } : undefined}
-                                >
-                                    {item.icon}
-                                </span>
-                                <span className="text-sm">{item.label}</span>
-                            </Link>
-                        ))}
-                    </div>
-                </nav>
-
-                {/* User Profile */}
-                <div className="p-4 mt-auto border-t border-accent/10">
-                    <div className="flex items-center gap-3 p-2 bg-[#f0f1f0] rounded-xl">
-                        <img
-                            alt="Sarah Jenkins"
-                            className="w-10 h-10 rounded-full object-cover border-2 border-primary"
-                            src="https://lh3.googleusercontent.com/aida-public/AB6AXuBGVD4p7avS9GOqwSQhRNyy2g1wG-zM21NCA-VsEpQWAeTfq5DBb29lwDyX3kuChDDkeLEyV1sIk2WMpQzhoNptft4BlnF6pAzSdQwLf11h3i7R5IJLCXZpxZ2nlXd5Qc_nMcGTn6V-buhrGZ111DGqxWaBjl6b6aYdmqEfRE6AtQA7GFslPQXrOc-B6w53PzmwB2ABB55cKdEl6Y7yCoGbM-Bjuj9d1GrGmUE_VYDE7iz4vBKN2JbT6sgkg1rPYh5YScALZKafuN7Y"
-                        />
-                        <div className="flex flex-col min-w-0">
-                            <span className="text-sm font-bold truncate">Sarah Jenkins</span>
-                            <span className="text-xs text-accent truncate">Lead Talent Partner</span>
-                        </div>
-                        <button className="ml-auto text-accent hover:text-primary transition-colors">
-                            <span className="material-symbols-outlined text-lg">settings</span>
-                        </button>
-                    </div>
-                </div>
-            </aside>
-
+        <div className="flex-1 flex flex-col overflow-hidden bg-[#f0f1f0]" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>
             {/* ─── Main Content ─── */}
             <main className="flex-1 flex flex-col overflow-hidden">
-                {/* Header */}
-                <header className="bg-white border-b border-accent/10 px-8 py-4 flex items-center justify-between z-10 shadow-sm">
+                {/* Header Actions */}
+                <div className="bg-white border-b border-accent/10 px-8 py-4 flex items-center justify-between shadow-sm">
                     <div className="flex items-center gap-4 flex-1">
-                        <h2 className="text-xl font-bold text-slate-800">Candidate Directory</h2>
-                        <div className="h-6 w-[1px] bg-accent/20" />
                         <div className="relative w-full max-w-md">
                             <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-accent">
                                 search
@@ -324,7 +255,7 @@ const Candidates: React.FC = () => {
                             <span className="absolute top-2 right-2 w-2 h-2 bg-red-500 rounded-full border-2 border-white" />
                         </button>
                     </div>
-                </header>
+                </div>
 
                 {/* Filters Area */}
                 <div className="bg-white px-8 py-3 border-b border-accent/10 flex items-center gap-3">
@@ -382,7 +313,13 @@ const Candidates: React.FC = () => {
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-accent/10">
-                                {filteredCandidates.map((candidate) => (
+                                {loading ? (
+                                    <tr>
+                                        <td colSpan={6} className="px-6 py-20 text-center font-bold text-accent">
+                                            Loading Candidates...
+                                        </td>
+                                    </tr>
+                                ) : filteredCandidates.map((candidate) => (
                                     <tr
                                         key={candidate.id}
                                         className="hover:bg-slate-50/50 transition-colors group cursor-pointer"
@@ -440,7 +377,7 @@ const Candidates: React.FC = () => {
                         <div className="px-6 py-4 bg-slate-50/30 border-t border-accent/10 flex items-center justify-between">
                             <span className="text-sm text-accent">
                                 Showing <span className="font-bold text-slate-800">1-{filteredCandidates.length}</span> of{' '}
-                                <span className="font-bold text-slate-800">248</span> candidates
+                                <span className="font-bold text-slate-800">{candidates.length}</span> candidates
                             </span>
                             <div className="flex items-center gap-2">
                                 <button
@@ -482,6 +419,7 @@ const Candidates: React.FC = () => {
                 </div>
             </main>
         </div>
+
     );
 };
 

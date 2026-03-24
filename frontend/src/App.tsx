@@ -7,6 +7,9 @@ import Dashboard from './pages/dashboard';
 import Candidates from './pages/candidates';
 import CandidateProfile from './pages/candidate';
 import SentimentAnalysis from './pages/setiment_analysis';
+import Interviews from './pages/interviews';
+import Assessments from './pages/assessments';
+import MainLayout from './components/MainLayout';
 
 function App() {
   return (
@@ -15,11 +18,13 @@ function App() {
         <Route path="/" element={<Navigate to="/signup" />} />
         <Route path="/signup" element={<Signup />} />
         <Route path="/login" element={<Login />} />
-        <Route path="/jobs" element={<JobPostingFeed />} />
-        <Route path="/dashboard" element={<Dashboard />} />
-        <Route path="/candidates" element={<Candidates />} />
-        <Route path="/candidate/:id" element={<CandidateProfile />} />
-        <Route path="/sentiment-analysis" element={<SentimentAnalysis />} />
+        <Route path="/jobs" element={<MainLayout><JobPostingFeed /></MainLayout>} />
+        <Route path="/dashboard" element={<MainLayout><Dashboard /></MainLayout>} />
+        <Route path="/candidates" element={<MainLayout><Candidates /></MainLayout>} />
+        <Route path="/candidate/:id" element={<MainLayout><CandidateProfile /></MainLayout>} />
+        <Route path="/sentiment-analysis" element={<MainLayout><SentimentAnalysis /></MainLayout>} />
+        <Route path="/interviews" element={<MainLayout><Interviews /></MainLayout>} />
+        <Route path="/assessments" element={<MainLayout><Assessments /></MainLayout>} />
       </Routes>
     </Router>
   );

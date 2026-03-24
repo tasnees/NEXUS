@@ -1,6 +1,6 @@
 
 import React, { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 
 // Job Card Interface
 interface JobPosting {
@@ -79,15 +79,11 @@ const JobPostingFeed: React.FC = () => {
                     description: '',
                     tags: ''
                 });
-                alert('🚀 Job Posting Successfully Dispatched to NEXUS Pipeline & Database!');
                 // Refresh jobs after a small delay
                 setTimeout(() => window.location.reload(), 1000);
-            } else {
-                alert('Failed to post job. Please try again.');
             }
         } catch (error) {
             console.error('Error posting job:', error);
-            alert('An error occurred.');
         } finally {
             setIsSubmitting(false);
         }
@@ -148,10 +144,10 @@ const JobPostingFeed: React.FC = () => {
                             <span className="text-2xl font-extrabold tracking-tight">RECRUIT<span className="text-secondary text-lg">AI</span></span>
                         </div>
                         <div className="hidden lg:flex items-center gap-8 text-[15px] font-medium">
-                            <a href="#" className="text-white border-b-2 border-secondary pb-1">Dashboard</a>
-                            <a href="#" className="text-secondary hover:text-white transition-colors">Talent Pool</a>
-                            <a href="#" className="text-secondary hover:text-white transition-colors">Analytics</a>
-                            <a href="#" className="text-secondary hover:text-white transition-colors">Automation</a>
+                            <Link to="/dashboard" className="text-secondary hover:text-white transition-colors">Dashboard</Link>
+                            <Link to="/candidates" className="text-secondary hover:text-white transition-colors">Talent Pool</Link>
+                            <Link to="/sentiment-analysis" className="text-secondary hover:text-white transition-colors">Sentiment Analytics</Link>
+                            <Link to="/jobs" className="text-white border-b-2 border-secondary pb-1">Jobs Feed</Link>
                         </div>
                     </div>
                     <div className="flex items-center gap-6">
@@ -201,22 +197,22 @@ const JobPostingFeed: React.FC = () => {
                     <div className="bg-surface p-6 rounded-xl shadow-sm border border-secondary/10">
                         <h3 className="text-xs font-bold uppercase tracking-widest mb-5 text-secondary">Recruitment Tools</h3>
                         <nav className="space-y-1">
-                            <a href="#" className="flex items-center gap-3 p-3 rounded-lg bg-background text-primary font-bold transition-all">
+                            <Link to="/jobs" className="flex items-center gap-3 p-3 rounded-lg bg-background text-primary font-bold transition-all">
                                 <span className="material-symbols-outlined text-xl">dashboard</span>
                                 <span className="text-sm">Active Postings</span>
-                            </a>
-                            <a href="#" className="flex items-center gap-3 p-3 rounded-lg text-secondary hover:bg-background/50 hover:text-header transition-all">
-                                <span className="material-symbols-outlined text-xl">account_tree</span>
-                                <span className="text-sm">Hiring Pipeline Status</span>
-                            </a>
-                            <a href="#" className="flex items-center gap-3 p-3 rounded-lg text-secondary hover:bg-background/50 hover:text-header transition-all">
-                                <span className="material-symbols-outlined text-xl">settings_input_component</span>
-                                <span className="text-sm">Automation (n8n)</span>
-                            </a>
+                            </Link>
+                            <Link to="/candidates" className="flex items-center gap-3 p-3 rounded-lg text-secondary hover:bg-background/50 hover:text-header transition-all">
+                                <span className="material-symbols-outlined text-xl">group</span>
+                                <span className="text-sm">Candidate Pool</span>
+                            </Link>
                             <a href="#" className="flex items-center gap-3 p-3 rounded-lg text-secondary hover:bg-background/50 hover:text-header transition-all">
                                 <span className="material-symbols-outlined text-xl">history_edu</span>
                                 <span className="text-sm">AI Interview Logs</span>
                             </a>
+                            <Link to="/interviews" className="flex items-center gap-3 p-3 rounded-lg text-secondary hover:bg-background/50 hover:text-header transition-all">
+                                <span className="material-symbols-outlined text-xl">event_available</span>
+                                <span className="text-sm">Scheduled Interviews</span>
+                            </Link>
                         </nav>
                     </div>
 
@@ -378,7 +374,7 @@ const JobPostingFeed: React.FC = () => {
                                             <div className="flex items-center gap-3">
                                                 <button className="px-5 py-2.5 rounded-lg border border-secondary/30 text-header text-sm font-bold hover:bg-background transition-all">Manage Post</button>
                                                 <button 
-                                                    onClick={() => navigate('/candidates')}
+                                                    onClick={() => navigate(`/candidates?job=${encodeURIComponent(job.title)}`)}
                                                     className="px-6 py-2.5 rounded-lg bg-primary text-white text-sm font-bold hover:bg-header transition-all shadow-md shadow-primary/10"
                                                 >
                                                     View Candidates
@@ -410,36 +406,7 @@ const JobPostingFeed: React.FC = () => {
                 </section>
             </main>
 
-            {/* Floating Widget */}
-            <div className="fixed bottom-10 right-10 bg-header text-white border border-white/10 p-5 rounded-2xl shadow-2xl w-80 hidden xl:block">
-                <div className="flex items-center justify-between mb-4">
-                    <div className="flex items-center gap-2">
-                        <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse"></span>
-                        <span className="text-[11px] font-bold uppercase tracking-[0.2em] text-secondary">Vetting Engine Online</span>
-                    </div>
-                    <button className="text-white/40 hover:text-white"><span className="material-symbols-outlined text-lg">close</span></button>
-                </div>
-                <div className="h-36 bg-navy-deep rounded-xl overflow-hidden relative border border-white/5">
-                    <img 
-                        src="https://lh3.googleusercontent.com/aida-public/AB6AXuCdX4My7xM2JDOegj_a2eCQzPOGJeN3fWuFoHp8CWrfX4at9fP2eEsFGV_idBhE0lwt8jYnAdBUHiKicaG-dtM6pJ9VTk4ubixfhVCQHbL6naLKjkE6eaavuqZ7sE6xu_A1H9v_eyNwTRAslr3tmbEAdS7WECTpVt1ejrlLVkg_9F0n0UibmwfyKxLL5lHdjP9xWHo_Gsm3fU-V_1ZxoD3K4zF3OYoN6CVyCgx6240LFP1O-OXmmMOPmubJrZwiBU3kM9jnw6QcUvlI" 
-                        alt="Network Map" 
-                        className="w-full h-full object-cover opacity-30 grayscale contrast-125" 
-                    />
-                    <div className="absolute inset-0 bg-gradient-to-t from-navy-deep to-transparent"></div>
-                    <div className="absolute top-1/2 left-1/3 w-3 h-3 bg-secondary rounded-full shadow-[0_0_15px_#778DA9]"></div>
-                    <div className="absolute top-1/4 right-1/4 w-2 h-2 bg-secondary/40 rounded-full"></div>
-                    <div className="absolute bottom-1/3 right-1/2 w-2 h-2 bg-secondary/60 rounded-full"></div>
-                </div>
-                <div className="mt-4 flex items-center justify-between">
-                    <div>
-                        <div className="text-xl font-bold">1,248</div>
-                        <div className="text-[10px] text-secondary font-bold uppercase tracking-tight">AI Screened this week</div>
-                    </div>
-                    <button className="p-2 rounded-lg bg-white/5 hover:bg-white/10 transition-colors">
-                        <span className="material-symbols-outlined text-secondary">monitoring</span>
-                    </button>
-                </div>
-            </div>
+
 
             {/* Post Job Modal */}
             {isModalOpen && (

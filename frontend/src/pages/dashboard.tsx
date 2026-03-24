@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 
 const Dashboard: React.FC = () => {
     const navigate = useNavigate();
@@ -48,79 +48,19 @@ const Dashboard: React.FC = () => {
                     tags: ''
                 });
                 // Small delay to let the modal animation finish if any
-                setTimeout(() => alert('🚀 Job Posting Successfully Dispatched to NEXUS Pipeline!'), 100);
-            } else {
-                alert('Failed to post job. Please try again.');
+                setTimeout(() => {
+                    // Success!
+                }, 100);
             }
         } catch (error) {
             console.error('Error posting job:', error);
-            alert('An error occurred while connecting to the NEXUS pipeline.');
         } finally {
             setIsSubmitting(false);
         }
     };
 
     return (
-        <div className="flex min-h-screen overflow-hidden">
-            {/* Sidebar */}
-            <aside className="w-72 bg-dark-sidebar text-slate-300 flex flex-col relative z-20 shadow-2xl">
-                <div className="absolute inset-0 texture-overlay pointer-events-none"></div>
-                <div className="p-8 flex items-center gap-3 relative z-10">
-                    <div className="w-10 h-10 bg-primary rounded-xl flex items-center justify-center shadow-lg shadow-primary/20">
-                        <span className="material-symbols-outlined text-white">neurology</span>
-                    </div>
-                    <span className="text-2xl font-display font-bold text-white tracking-tight">NEXUS AI</span>
-                </div>
-                <nav className="flex-1 px-6 mt-4 space-y-1 relative z-10">
-                    <p className="px-4 py-2 text-[10px] font-bold text-accent uppercase tracking-[0.2em] mb-2">Main Menu</p>
-                    <Link to="/dashboard" className="flex items-center gap-3 px-4 py-3 bg-primary text-white rounded-xl shadow-lg shadow-primary/20">
-                        <span className="material-symbols-outlined">dashboard</span>
-                        <span className="font-semibold text-sm">Dashboard</span>
-                    </Link>
-                    <Link to="/jobs" className="flex items-center gap-3 px-4 py-3 hover:bg-white/5 transition-all rounded-xl group">
-                        <span className="material-symbols-outlined text-accent group-hover:text-white transition-colors">work</span>
-                        <span className="text-sm font-medium">Job Postings</span>
-                    </Link>
-                    <Link to="/candidates" className="flex items-center gap-3 px-4 py-3 hover:bg-white/5 transition-all rounded-xl group">
-                        <span className="material-symbols-outlined text-accent group-hover:text-white transition-colors">groups</span>
-                        <span className="text-sm font-medium">Candidates</span>
-                    </Link>
-                    <Link to="#" className="flex items-center gap-3 px-4 py-3 hover:bg-white/5 transition-all rounded-xl group">
-                        <span className="material-symbols-outlined text-accent group-hover:text-white transition-colors">psychology</span>
-                        <span className="text-sm font-medium">AI Training</span>
-                    </Link>
-                    <Link to="#" className="flex items-center gap-3 px-4 py-3 hover:bg-white/5 transition-all rounded-xl group">
-                        <span className="material-symbols-outlined text-accent group-hover:text-white transition-colors">analytics</span>
-                        <span className="text-sm font-medium">Insights</span>
-                    </Link>
-                </nav>
-                <div className="p-6 border-t border-white/5 relative z-10">
-                    <div className="bg-gradient-to-br from-[#1B263B] to-[#0D1B2A] rounded-2xl p-4 mb-6 border border-white/5 shadow-inner">
-                        <div className="flex items-center justify-between mb-3">
-                            <p className="text-[10px] text-accent uppercase font-bold tracking-widest">Model Status</p>
-                            <span className="flex h-2 w-2 rounded-full bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.6)]"></span>
-                        </div>
-                        <div className="flex items-center justify-between">
-                            <span className="text-sm font-semibold text-white">V2.4 Stable</span>
-                            <span className="text-[10px] text-accent">99.9% Uptime</span>
-                        </div>
-                    </div>
-                    <div className="flex items-center gap-3 p-2 bg-white/5 rounded-2xl border border-white/5">
-                        <img 
-                            alt="Marcus Chen" 
-                            className="w-10 h-10 rounded-xl object-cover shadow-md" 
-                            src="https://lh3.googleusercontent.com/aida-public/AB6AXuBizMENZ0vWMgFpYN3dpkBdzIhos1nNbvVVLYFreDVFyhG46Bg2PFF4fSjIcAHugFa4WSc1qVGix7erBy2AzOPM4cYviAKcEsR9hlt8qnkSYVUKNqkuhFDrV0t_mDjviMNsZn4Gbh62MkTeWe3ShpxIWX_AEq9rtjL6XbDM34i3k56-bhrsg3m4WpWU-v2BwwnE-r0PTvjk9sDHwC0QKIyR1itGAYfytn0H8cDuYKBj1YzcXyOU2XREt9nikHCTUWHIMKDv1pLUdaaT"
-                        />
-                        <div className="overflow-hidden">
-                            <p className="text-sm font-bold text-white truncate">Marcus Chen</p>
-                            <p className="text-[10px] text-accent font-medium uppercase tracking-wider">Lead Recruiter</p>
-                        </div>
-                        <button className="ml-auto text-accent hover:text-white">
-                            <span className="material-symbols-outlined text-lg">settings</span>
-                        </button>
-                    </div>
-                </div>
-            </aside>
+        <div className="flex-1 overflow-y-auto">
 
             {/* Main Content */}
             <main className="flex-1 overflow-y-auto custom-scrollbar bg-[#f0f1f0]">

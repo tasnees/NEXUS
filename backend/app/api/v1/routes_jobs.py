@@ -8,8 +8,19 @@ from app.schemas.job import JobResponse, JobCreate
 router = APIRouter()
 
 @router.post("/", response_model=JobResponse)
-def create_job(job: JobCreate, db: Session = Depends(get_db)):
+async def create_job(job: JobCreate, db: Session = Depends(get_db)):
     try:
+        from app.utils.job_enrichment import enrich_job_details
+
+        # Enrich missing information with AI if needed
+        ai_data = await enrich_job_details(job.title)
+        
+        # Merge AI data if user fields are empty
+        description = job.description or ai_data.get("description", "")
+        requirements = job.requirements or ai_data.get("requirements", "")
+        salary = job.salary or ai_data.get("salary", "Competitive")
+        tags = job.tags if job.tags and len(job.tags) > 0 else ai_data.get("tags", ["Gen AI", "Modern Talent"])
+
         location_map = {"onsite": "Onsite", "online": "Remote", "hybrid": "Hybrid"}
         location = location_map.get(job.nature.lower(), "Remote")
         
@@ -22,13 +33,13 @@ def create_job(job: JobCreate, db: Session = Depends(get_db)):
             applicants=0,
             match_rate=0,
             interviewed=0,
-            tags=job.tags,
+            tags=tags,
             company=job.company,
-            salary=job.salary,
+            salary=salary,
             time_per_week=job.timePerWeek,
             nature=job.nature,
-            requirements=job.requirements,
-            description=job.description
+            requirements=requirements,
+            description=description
         )
         db.add(db_job)
         db.commit()
@@ -39,52 +50,30 @@ def create_job(job: JobCreate, db: Session = Depends(get_db)):
         traceback.print_exc()
         raise
 
+from app.models.candidate import Candidate
+from app.models.interview import Interview
+from sqlalchemy import func
+
 @router.get("/", response_model=List[JobResponse])
 def get_jobs(db: Session = Depends(get_db)):
     jobs = db.query(Job).all()
     
-    # If no jobs exist, return the demo data from the UI to initialize the DB or just for testing
-    if not jobs:
-        demo_jobs = [
-            {
-                "title": "Principal Neural Architect",
-                "company_logo": "https://lh3.googleusercontent.com/aida-public/AB6AXuBXUe0dmBI_6Ahqs12jg49xCqnskPbWVbJiDJo-a8JpMvraRUoQRiVW2GPG0395sCABn0bzSPqmE4NlyGxXLNTx_YyDFK6QXj51d6Rf8aDLbxfrwWO4bUxQ_ixa3KvJaqDCBNZK5t-66FlUyxvWpYp0dOSwdLAoGZlEF5CtWnRYOC9K9L1GMnUZ9zbZnpADAd0E38c0U_DmPBkK0mMmYJzOwQ-AwpFqF1GOJethPdY5gsGaKxVbl2Z4pyv_nCU7EB_cA9aoDwjyEENM",
-                "location": "Austin, TX",
-                "posted_at": "Posted 2 days ago",
-                "status": "Live Posting",
-                "applicants": 48,
-                "match_rate": 92,
-                "interviewed": 12,
-                "tags": ["PyTorch", "Distributed Systems"]
-            },
-            {
-                "title": "Senior MLOps Engineer",
-                "company_logo": "https://lh3.googleusercontent.com/aida-public/AB6AXuBXAJqZSdeZJRJgYbzeqjAKNplDLbJ3PTxuzQUNkJKQ643lr8SN-_cuiwlcKmYoxqUslVFau2cGeWenp1IHW4FR4xWTNJ6vDGFA2scYZsKqtI5-CGAnrJwureBfaVPVS9Zh9JdgBnbtlY4f1lsAB-8H_bXC2XvqjLB9Sz9bN4pTvhvJDVRFbLbcuUHd9vSZmJJlqdyWuhHpprAWUt65ZWDrv5WDABgWptGPCNRQkXfFRk9gU_SM9myUtJBQrmjNkRUfQRUDMw18ckTT",
-                "location": "Remote",
-                "posted_at": "Posted 5 days ago",
-                "status": "Action Required",
-                "applicants": 156,
-                "match_rate": 85,
-                "interviewed": 3,
-                "tags": ["Kubernetes", "Terraform"]
-            },
-            {
-                "title": "Director of Product (Gen AI)",
-                "company_logo": "https://lh3.googleusercontent.com/aida-public/AB6AXuByDir7XIdCHyPtSmLy31zsy9FR3d_l2pfX44YKo8Frwz-Gn1CGuq7qxLV6ZUjRhw4lXMvyNP8-wPTSiX8sExN5woHDWKNQv9QtMdPCMn3yRPTEcmU4W8n1MLhOu-0w27drP843bMYODrgv8ulizjprqMoZ6ZkH0HfL4pa498QS7dqqdgIl5qQOCn7WXE1_BZUpqBQzruC2uX8wFyHlslrelaaSrb5poJC6QuVkIeBK958I2S7D0Fa6Tto9uqwcpBM0rASkvIj1Qcnn",
-                "location": "London, UK",
-                "posted_at": "Posted 1 week ago",
-                "status": "Live Posting",
-                "applicants": 32,
-                "match_rate": 97,
-                "interviewed": 8,
-                "tags": ["Product Strategy", "NLP"]
-            }
-        ]
-        # Seed the DB with demo data if empty
-        for job_data in demo_jobs:
-            db_job = Job(**job_data)
-            db.add(db_job)
-        db.commit()
-        jobs = db.query(Job).all()
+    # Process each job to calculate dynamic metrics
+    for job in jobs:
+        # 1. Total Applicants: Count candidates where applied_job matches job.title
+        applicant_count = db.query(Candidate).filter(Candidate.applied_job == job.title).count()
+        job.applicants = applicant_count
         
+        # 2. Total Interviewed: Count interviews where role matches job.title
+        interview_count = db.query(Interview).filter(Interview.role == job.title).count()
+        job.interviewed = interview_count
+        
+        # 3. Avg Match Rate: For now, we simulate this based on a random seed or skill match 
+        # (In a real scenario, this would be an average of candidate.match_score)
+        # For demo purposes, we'll return a dynamic yet stable value if there are applicants
+        if applicant_count > 0:
+            job.match_rate = min(98, 75 + (applicant_count % 20)) # Simulating higher quality for more applicants
+        else:
+            job.match_rate = 0
+            
     return jobs
