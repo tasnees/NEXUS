@@ -1,17 +1,46 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useAuth, type UserRole } from '../context/AuthContext';
 
 const Login: React.FC = () => {
     const navigate = useNavigate();
+    const { login } = useAuth();
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
+    const [role, setRole] = useState<UserRole>('recruiter');
     const [showPassword, setShowPassword] = useState(false);
     const [keepLoggedIn, setKeepLoggedIn] = useState(false);
+    const [loading, setLoading] = useState(false);
+    const [error, setError] = useState<string | null>(null);
 
-    const handleLogin = (e: React.FormEvent) => {
+    const handleLogin = async (e: React.FormEvent) => {
         e.preventDefault();
-        console.log('Login attempt:', { email, password, keepLoggedIn });
-        navigate('/dashboard');
+        setLoading(true);
+        setError(null);
+
+        try {
+            const response = await fetch('http://localhost:8001/api/v1/auth/login', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ email, password }),
+            });
+
+            const data = await response.json();
+
+            if (!response.ok) {
+                throw new Error(data.detail || 'Authentication failed');
+            }
+
+            console.log('Login success:', data);
+            login(data.role || role); 
+            navigate('/dashboard');
+        } catch (err) {
+            setError(err instanceof Error ? err.message : 'An error occurred during login');
+        } finally {
+            setLoading(false);
+        }
     };
 
     return (
@@ -80,18 +109,52 @@ const Login: React.FC = () => {
                     </div>
                     <div className="mb-10">
                         <h2 className="text-3xl font-bold mb-2 text-navy-deep dark:text-off-white">Welcome back</h2>
-                        <p className="text-slate-600 dark:text-accent">Access your automated recruitment dashboard.</p>
+                        <p className="text-slate-600 dark:text-accent mb-6">Access your automated recruitment dashboard.</p>
+                        
+                        {error && (
+                            <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg flex items-center gap-3 text-red-700 text-sm animate-pulse">
+                                <span className="material-symbols-outlined">error</span>
+                                <p className="font-semibold">{error}</p>
+                            </div>
+                        )}
                     </div>
                     <div className="flex p-1 bg-slate-200 dark:bg-navy-dark rounded-lg mb-8">
-                        <button className="flex-1 py-2.5 text-sm font-bold rounded-md bg-white dark:bg-primary shadow-md text-navy-deep dark:text-white transition-all">
+                        <button 
+                            onClick={() => navigate('/login')}
+                            className="flex-1 py-2.5 text-sm font-bold rounded-md bg-white dark:bg-primary shadow-md text-navy-deep dark:text-white transition-all"
+                        >
                             Login
                         </button>
-                        <button className="flex-1 py-2.5 text-sm font-semibold rounded-md text-slate-500 dark:text-accent hover:text-navy-deep dark:hover:text-off-white transition-all">
+                        <button 
+                            onClick={() => navigate('/signup')}
+                            className="flex-1 py-2.5 text-sm font-semibold rounded-md text-slate-500 dark:text-accent hover:text-navy-deep dark:hover:text-off-white transition-all"
+                        >
                             Sign Up
                         </button>
                     </div>
                     
                     <form onSubmit={handleLogin} className="space-y-5">
+                        <div>
+                            <label className="block text-sm font-bold mb-2 text-navy-dark dark:text-accent">Login As (Role)</label>
+                            <div className="relative group">
+                                <span className="absolute inset-y-0 left-0 pl-4 flex items-center text-slate-400 group-focus-within:text-primary transition-colors">
+                                    <span className="material-symbols-outlined text-xl">badge</span>
+                                </span>
+                                <select 
+                                    className="block w-full pl-12 pr-4 py-3.5 bg-white dark:bg-navy-dark border border-slate-300 dark:border-slate-700 rounded-xl focus:ring-2 focus:ring-primary focus:border-transparent outline-none transition-all text-navy-deep dark:text-off-white appearance-none cursor-pointer"
+                                    value={role || 'recruiter'}
+                                    onChange={(e) => setRole(e.target.value as UserRole)}
+                                >
+                                    <option value="recruiter">Recruiter / Talent Acquisition</option>
+                                    <option value="hiring_manager">Hiring Manager</option>
+                                    <option value="interviewer">Interviewer (Team Member)</option>
+                                    <option value="hr_admin">HR Manager / Admin</option>
+                                </select>
+                                <span className="absolute inset-y-0 right-0 pr-4 flex items-center text-slate-400 pointer-events-none">
+                                    <span className="material-symbols-outlined text-xl">expand_more</span>
+                                </span>
+                            </div>
+                        </div>
                         <div>
                             <label className="block text-sm font-bold mb-2 text-navy-dark dark:text-accent">Corporate Email</label>
                             <div className="relative group">
@@ -122,6 +185,7 @@ const Login: React.FC = () => {
                                     placeholder="••••••••"
                                     value={password}
                                     onChange={(e) => setPassword(e.target.value)}
+                                    maxLength={72}
                                 />
                                 <button 
                                     type="button" 
@@ -144,10 +208,17 @@ const Login: React.FC = () => {
                         </div>
                         <button 
                             type="submit" 
-                            className="w-full py-4 bg-primary hover:bg-navy-dark text-white font-bold rounded-xl shadow-xl shadow-primary/20 transition-all transform active:scale-[0.99] flex items-center justify-center space-x-2"
+                            disabled={loading}
+                            className="w-full py-4 bg-primary hover:bg-navy-dark text-white font-bold rounded-xl shadow-xl shadow-primary/20 transition-all transform active:scale-[0.99] flex items-center justify-center space-x-2 disabled:opacity-70"
                         >
-                            <span>Sign In to Dashboard</span>
-                            <span className="material-symbols-outlined text-lg">arrow_forward</span>
+                            {loading ? (
+                                <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
+                            ) : (
+                                <>
+                                    <span>Sign In to Dashboard</span>
+                                    <span className="material-symbols-outlined text-lg">arrow_forward</span>
+                                </>
+                            )}
                         </button>
                     </form>
 

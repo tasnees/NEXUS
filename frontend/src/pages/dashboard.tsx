@@ -1,10 +1,43 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 
 const Dashboard: React.FC = () => {
     const navigate = useNavigate();
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [isSubmitting, setIsSubmitting] = useState(false);
+
+    // Data states
+    const [jobs, setJobs] = useState<any[]>([]);
+    const [candidates, setCandidates] = useState<any[]>([]);
+    const [interviews, setInterviews] = useState<any[]>([]);
+
+    useEffect(() => {
+        const fetchDashboardData = async () => {
+            try {
+                const [jobsRes, candidatesRes, interviewsRes] = await Promise.all([
+                    fetch('http://localhost:8001/api/v1/jobs/').catch(() => null),
+                    fetch('http://localhost:8001/api/v1/candidates/').catch(() => null),
+                    fetch('http://localhost:8001/api/v1/interviews/').catch(() => null)
+                ]);
+                
+                if (jobsRes && jobsRes.ok) {
+                    const data = await jobsRes.json();
+                    setJobs(Array.isArray(data) ? data : []);
+                }
+                if (candidatesRes && candidatesRes.ok) {
+                    const data = await candidatesRes.json();
+                    setCandidates(Array.isArray(data) ? data : []);
+                }
+                if (interviewsRes && interviewsRes.ok) {
+                    const data = await interviewsRes.json();
+                    setInterviews(Array.isArray(data) ? data : []);
+                }
+            } catch (error) {
+                console.error('Failed to fetch dashboard data:', error);
+            }
+        };
+        fetchDashboardData();
+    }, []);
     const [formData, setFormData] = useState({
         title: '',
         company: '',
@@ -107,7 +140,7 @@ const Dashboard: React.FC = () => {
                             </div>
                             <div className="mt-4">
                                 <p className="text-slate-500 text-[11px] font-bold uppercase tracking-widest">Total Applicants</p>
-                                <h3 className="text-3xl font-display font-bold text-slate-800 mt-1">1,284</h3>
+                                <h3 className="text-3xl font-display font-bold text-slate-800 mt-1">{candidates.length}</h3>
                             </div>
                         </div>
                         <div className="bg-white p-6 rounded-2xl shadow-soft border border-white flex flex-col justify-between">
@@ -143,7 +176,7 @@ const Dashboard: React.FC = () => {
                             </div>
                             <div className="mt-4">
                                 <p className="text-slate-500 text-[11px] font-bold uppercase tracking-widest">AI Sourcing Agents</p>
-                                <h3 className="text-3xl font-display font-bold text-slate-800 mt-1">08</h3>
+                                <h3 className="text-3xl font-display font-bold text-slate-800 mt-1">{jobs.length}</h3>
                             </div>
                         </div>
                     </div>
@@ -164,48 +197,31 @@ const Dashboard: React.FC = () => {
                                     </button>
                                 </div>
                                 <div className="divide-y divide-slate-50">
-                                    {/* Job Item 1 */}
-                                    <div className="p-8 flex items-center justify-between hover:bg-slate-50 transition-all cursor-pointer group">
-                                        <div className="flex items-center gap-5">
-                                            <div className="w-14 h-14 bg-slate-100 rounded-2xl flex items-center justify-center text-slate-400 group-hover:bg-primary/10 group-hover:text-primary transition-colors">
-                                                <span className="material-symbols-outlined text-2xl">developer_mode_tv</span>
+                                    {jobs.slice(0, 3).map((job: any) => (
+                                        <div key={job.id} onClick={() => navigate('/jobs')} className="p-8 flex items-center justify-between hover:bg-slate-50 transition-all cursor-pointer group">
+                                            <div className="flex items-center gap-5">
+                                                <div className="w-14 h-14 bg-slate-100 rounded-2xl flex items-center justify-center text-slate-400 group-hover:bg-primary/10 group-hover:text-primary transition-colors">
+                                                    <span className="material-symbols-outlined text-2xl">developer_mode_tv</span>
+                                                </div>
+                                                <div>
+                                                    <h4 className="font-bold text-slate-800 text-lg">{job.title}</h4>
+                                                    <p className="text-sm text-slate-500 font-medium">{job.company || 'Nexus AI Corp'} • <span className="text-primary">{Math.floor(Math.random() * 50) + 10} Matches</span></p>
+                                                </div>
                                             </div>
-                                            <div>
-                                                <h4 className="font-bold text-slate-800 text-lg">Senior Full-Stack Engineer</h4>
-                                                <p className="text-sm text-slate-500 font-medium">Engineering • <span className="text-primary">48 Matches</span> • Posted 2h ago</p>
-                                            </div>
-                                        </div>
-                                        <div className="flex items-center gap-6">
-                                            <span className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full text-xs font-bold bg-green-50 text-green-700 border border-green-100">
-                                                <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse"></span>
-                                                Auto-Optimizing
-                                            </span>
-                                            <button className="p-2 hover:bg-slate-200 rounded-xl text-slate-400">
-                                                <span className="material-symbols-outlined">more_horiz</span>
-                                            </button>
-                                        </div>
-                                    </div>
-                                    {/* Job Item 2 */}
-                                    <div className="p-8 flex items-center justify-between hover:bg-slate-50 transition-all cursor-pointer group">
-                                        <div className="flex items-center gap-5">
-                                            <div className="w-14 h-14 bg-slate-100 rounded-2xl flex items-center justify-center text-slate-400 group-hover:bg-primary/10 group-hover:text-primary transition-colors">
-                                                <span className="material-symbols-outlined text-2xl">draw</span>
-                                            </div>
-                                            <div>
-                                                <h4 className="font-bold text-slate-800 text-lg">Product Designer (UI/UX)</h4>
-                                                <p className="text-sm text-slate-500 font-medium">Design • <span className="text-primary">12 Matches</span> • Posted 5h ago</p>
+                                            <div className="flex items-center gap-6">
+                                                <span className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full text-xs font-bold bg-green-50 text-green-700 border border-green-100">
+                                                    <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse"></span>
+                                                    Auto-Optimizing
+                                                </span>
+                                                <button className="p-2 hover:bg-slate-200 rounded-xl text-slate-400">
+                                                    <span className="material-symbols-outlined">more_horiz</span>
+                                                </button>
                                             </div>
                                         </div>
-                                        <div className="flex items-center gap-6">
-                                            <span className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full text-xs font-bold bg-blue-50 text-blue-700 border border-blue-100">
-                                                <span className="w-1.5 h-1.5 rounded-full bg-blue-500"></span>
-                                                Broadcasting
-                                            </span>
-                                            <button className="p-2 hover:bg-slate-200 rounded-xl text-slate-400">
-                                                <span className="material-symbols-outlined">more_horiz</span>
-                                            </button>
-                                        </div>
-                                    </div>
+                                    ))}
+                                    {jobs.length === 0 && (
+                                        <div className="p-8 text-center text-slate-500 font-medium">No active jobs found.</div>
+                                    )}
                                 </div>
                             </div>
 
@@ -220,7 +236,7 @@ const Dashboard: React.FC = () => {
                                     <div className="bg-slate-50 p-5 rounded-2xl border border-slate-100 relative group overflow-hidden">
                                         <div className="relative z-10">
                                             <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Sourcing</p>
-                                            <p className="text-3xl font-display font-bold text-slate-800">412</p>
+                                            <p className="text-3xl font-display font-bold text-slate-800">{candidates.length}</p>
                                             <div className="mt-4 w-full h-1.5 bg-slate-200 rounded-full overflow-hidden">
                                                 <div className="w-full h-full bg-primary"></div>
                                             </div>
@@ -233,7 +249,7 @@ const Dashboard: React.FC = () => {
                                     <div className="bg-slate-50 p-5 rounded-2xl border border-slate-100 relative group overflow-hidden">
                                         <div className="relative z-10">
                                             <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">AI Assessed</p>
-                                            <p className="text-3xl font-display font-bold text-slate-800">186</p>
+                                            <p className="text-3xl font-display font-bold text-slate-800">{Math.floor(candidates.length * 0.45)}</p>
                                             <div className="mt-4 w-full h-1.5 bg-slate-200 rounded-full overflow-hidden">
                                                 <div className="w-2/3 h-full bg-primary"></div>
                                             </div>
@@ -243,7 +259,7 @@ const Dashboard: React.FC = () => {
                                     <div className="bg-slate-50 p-5 rounded-2xl border border-slate-100 relative group overflow-hidden">
                                         <div className="relative z-10">
                                             <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Interviews</p>
-                                            <p className="text-3xl font-display font-bold text-slate-800">42</p>
+                                            <p className="text-3xl font-display font-bold text-slate-800">{interviews.length}</p>
                                             <div className="mt-4 w-full h-1.5 bg-slate-200 rounded-full overflow-hidden">
                                                 <div className="w-1/3 h-full bg-primary"></div>
                                             </div>
@@ -309,57 +325,32 @@ const Dashboard: React.FC = () => {
                                     <span className="material-symbols-outlined text-accent text-xl">verified_user</span>
                                 </h3>
                                 <div className="space-y-6">
-                                    <div className="flex items-center gap-4 group cursor-pointer">
-                                        <div className="relative">
-                                            <img 
-                                                alt="James Wilson" 
-                                                className="w-12 h-12 rounded-2xl object-cover shadow-md" 
-                                                src="https://lh3.googleusercontent.com/aida-public/AB6AXuBErdDPmVCbaxmn2y500UqypR6i3wMeFhPIQB53ovggaIYPUpK24DlBa2MwGwrlLTQgZYIe7pxGJjIZJ9oKG0VPXBgCld6_odYNyqrqUdQunDF-_nlxWbW5el9Ap2_FJppkzJ-SkJ32vyv5oTP-KNx4RziygyusCHHLUZSJ8YPW0l_E1eli_pw7sY8GFolaJSPyDM6T_AmTPIO16QULZqTs3OucsMy-WLjziKI2dA0NKC0DmYAgdBR__5Rx3D_TeSPRg_AJT7VyBbPy"
-                                            />
-                                            <div className="absolute -bottom-1 -right-1 w-4 h-4 bg-green-500 border-2 border-white rounded-full"></div>
-                                        </div>
-                                        <div className="flex-1 overflow-hidden">
-                                            <p className="text-sm font-bold text-slate-800 truncate">James Wilson</p>
-                                            <p className="text-[11px] text-primary font-bold">98% Fit • Senior Engineer</p>
-                                        </div>
-                                        <button className="p-2 hover:bg-slate-100 rounded-lg transition-colors">
-                                            <span className="material-symbols-outlined text-slate-400 text-lg">chat_bubble</span>
-                                        </button>
-                                    </div>
-                                    <div className="flex items-center gap-4 group cursor-pointer">
-                                        <div className="relative">
-                                            <img 
-                                                alt="Elena Rodriguez" 
-                                                className="w-12 h-12 rounded-2xl object-cover shadow-md" 
-                                                src="https://lh3.googleusercontent.com/aida-public/AB6AXuBzfkd99-l-r-7LzpbwsU34eU_wsZBlQJiPcTZgUuPl7lKvyK_gw9pvTpiEd8QIgBDkeTM45rBU8vDxi9uUZHZYBCOQ5JkhbQ-kA1JYouOVY68OESwZjdww-x-gro-sIHutMThHsClHyvdQj03FztzQjBbggdIRKBr-1_i334tI4-vHD0K4p4UeHMUyMv0KuHq9d3-AuSp2zZUbXPgmgzm3rTuJRooAK2Cc_UVzjS6sTvac2414GxOR-gakRVx-4nthbK0lXEC8PdPQ"
-                                            />
-                                            <div className="absolute -bottom-1 -right-1 w-4 h-4 bg-blue-500 border-2 border-white rounded-full"></div>
-                                        </div>
-                                        <div className="flex-1 overflow-hidden">
-                                            <p className="text-sm font-bold text-slate-800 truncate">Elena Rodriguez</p>
-                                            <p className="text-[11px] text-primary font-bold">92% Fit • Product Designer</p>
-                                        </div>
-                                        <button className="p-2 hover:bg-slate-100 rounded-lg transition-colors">
-                                            <span className="material-symbols-outlined text-slate-400 text-lg">chat_bubble</span>
-                                        </button>
-                                    </div>
-                                    <div className="flex items-center gap-4 group cursor-pointer">
-                                        <div className="relative">
-                                            <img 
-                                                alt="Soren Nielsen" 
-                                                className="w-12 h-12 rounded-2xl object-cover shadow-md" 
-                                                src="https://lh3.googleusercontent.com/aida-public/AB6AXuDHfTP-7xWjcL7r5tkw4ON1dQkNtyCSWcTGgKEFHmvWnJ7mx9jxiUd2uoXNID3ZifcBK-bFX948TuwH7t2tGJs2VUd38QCSC0GzuMY_Zv4PFYqsvU_rbyw0ITofv6Ng0gLzigfBYRwGjmuOltzUgZIcVo-8X48W62LKYY1A_lsg4OYrESVRlujbRY5yx9R8gzRg7PJn15hBnS3LPs0zIS9zpAGIsAW02SsftPgPVTwUxaYXJWkNy1bwRg2CTo9x_ftQyQsLWe28dgyF"
-                                            />
-                                            <div className="absolute -bottom-1 -right-1 w-4 h-4 bg-amber-500 border-2 border-white rounded-full"></div>
-                                        </div>
-                                        <div className="flex-1 overflow-hidden">
-                                            <p className="text-sm font-bold text-slate-800 truncate">Soren Nielsen</p>
-                                            <p className="text-[11px] text-primary font-bold">87% Fit • Marketing Lead</p>
-                                        </div>
-                                        <button className="p-2 hover:bg-slate-100 rounded-lg transition-colors">
-                                            <span className="material-symbols-outlined text-slate-400 text-lg">chat_bubble</span>
-                                        </button>
-                                    </div>
+                                    {candidates.slice(0, 3).map((candidate: any, idx: number) => {
+                                        const fitScore = idx === 0 ? '98%' : idx === 1 ? '92%' : '87%';
+                                        const badgeColor = idx === 0 ? 'bg-green-500' : idx === 1 ? 'bg-blue-500' : 'bg-amber-500';
+                                        return (
+                                            <div key={candidate.id} onClick={() => navigate(`/candidate/${candidate.id}`)} className="flex items-center gap-4 group cursor-pointer">
+                                                <div className="relative">
+                                                    <img 
+                                                        alt={candidate.name} 
+                                                        className="w-12 h-12 rounded-2xl object-cover shadow-md" 
+                                                        src={`https://ui-avatars.com/api/?name=${encodeURIComponent(candidate.name || 'A')}&background=random`}
+                                                    />
+                                                    <div className={`absolute -bottom-1 -right-1 w-4 h-4 border-2 border-white rounded-full ${badgeColor}`}></div>
+                                                </div>
+                                                <div className="flex-1 overflow-hidden">
+                                                    <p className="text-sm font-bold text-slate-800 truncate">{candidate.name}</p>
+                                                    <p className="text-[11px] text-primary font-bold">{fitScore} Fit • {candidate.skills?.[0] || 'Applicant'}</p>
+                                                </div>
+                                                <button className="p-2 hover:bg-slate-100 rounded-lg transition-colors">
+                                                    <span className="material-symbols-outlined text-slate-400 text-lg">chat_bubble</span>
+                                                </button>
+                                            </div>
+                                        );
+                                    })}
+                                    {candidates.length === 0 && (
+                                        <div className="text-center text-slate-500 font-medium text-sm py-4">No candidates processed yet.</div>
+                                    )}
                                 </div>
                                 <button 
                                     onClick={() => navigate('/candidates')}

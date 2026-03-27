@@ -82,7 +82,7 @@ SUPPORTED_MIME_TYPES = {
     "application/vnd.google-apps.document": "gdoc",
 }
 
-SCOPES = ["https://www.googleapis.com/auth/drive.readonly"]
+SCOPES = ["https://www.googleapis.com/auth/drive"]
 
 
 # ── auth ───────────────────────────────────────────────────────────────────────
@@ -135,10 +135,44 @@ def _list_files(service, folder_id: str) -> list[dict]:
     query = f"'{folder_id}' in parents and ({mime_filter}) and trashed=false"
     results = (
         service.files()
-        .list(q=query, fields="files(id, name, mimeType)", pageSize=100)
+        .list(q=query, fields="files(id, name, mimeType, parents)", pageSize=100)
         .execute()
     )
     return results.get("files", [])
+
+
+def _get_or_create_folder(service, folder_name: str, parent_id: str) -> str:
+    """Check if a folder exists under parent_id, else create it. Return folder_id."""
+    query = f"name='{folder_name}' and mimeType='application/vnd.google-apps.folder' and '{parent_id}' in parents and trashed=false"
+    results = service.files().list(q=query, fields="files(id)").execute()
+    files = results.get("files", [])
+    if files:
+        return files[0]["id"]
+
+    # Create it
+    file_metadata = {
+        "name": folder_name,
+        "mimeType": "application/vnd.google-apps.folder",
+        "parents": [parent_id]
+    }
+    folder = service.files().create(body=file_metadata, fields="id").execute()
+    return folder.get("id")
+
+
+def _move_file(service, file_id: str, old_parent_id: str, new_parent_id: str):
+    """Move a file from one folder to another."""
+    if old_parent_id == new_parent_id:
+        return
+    try:
+        service.files().update(
+            fileId=file_id,
+            addParents=new_parent_id,
+            removeParents=old_parent_id,
+            fields="id, parents"
+        ).execute()
+        log.info("     📂 Moved to job-specific folder.")
+    except Exception as e:
+        log.warning("     ⚠️ Could not move file: %s", e)
 
 
 def _download_file(service, file_id: str, mime_type: str) -> bytes:
@@ -190,9 +224,21 @@ def _extract_text(file_bytes: bytes, mime_type: str, filename: str) -> str:
 
 from app.config.database import SessionLocal, engine, Base
 from app.models.candidate import Candidate
+from app.models.job import Job
 
 # Ensure tables exist
 Base.metadata.create_all(bind=engine)
+
+def get_existing_jobs():
+    """Retrieve all jobs from the database for dynamic matching."""
+    db = SessionLocal()
+    try:
+        return db.query(Job).all()
+    except Exception as exc:
+        log.warning("Could not fetch existing jobs: %s", exc)
+        return []
+    finally:
+        db.close()
 
 def _is_already_synced(drive_file_id: str) -> bool:
     """Check if a candidate record with this drive_file_id already exists."""
@@ -237,60 +283,92 @@ def _save_to_db(payload: dict) -> Optional[dict]:
 
 
 # ── main pipeline ──────────────────────────────────────────────────────────────
+def _discover_folders_recursive(service, parent_id: str, discovered: dict):
+    """Recursively find all subfolders and map their IDs to names."""
+    query = f"'{parent_id}' in parents and mimeType='application/vnd.google-apps.folder' and trashed=false"
+    results = service.files().list(q=query, fields="files(id, name)").execute()
+    for f in results.get("files", []):
+        discovered[f["id"]] = f["name"]
+        _discover_folders_recursive(service, f["id"], discovered)
+
 def run_sync():
-    """Full synchronization pass: Discover → Download → Analyse → Save."""
+    """Full recursive synchronization pass: Discover → Download → Analyse → Save."""
     if not FOLDER_ID:
-        log.error(
-            "GOOGLE_DRIVE_FOLDER_ID is not set. "
-            "Add it to your .env file and try again."
-        )
+        log.error("GOOGLE_DRIVE_FOLDER_ID is not set.")
         return
 
     log.info("═" * 60)
-    log.info("  NEXUS Drive Sync – starting pass")
-    log.info("  Folder ID : %s", FOLDER_ID)
-    log.info("  Backend   : %s", BACKEND_API_URL)
+    log.info("  NEXUS Drive Sync – starting recursive pass")
+    log.info("  Root Folder : %s", FOLDER_ID)
     log.info("═" * 60)
 
     service = _build_drive_service()
-    files   = _list_files(service, FOLDER_ID)
+    
+    # 1. Discover all folders in the hierarchy
+    folder_map = {FOLDER_ID: None} # root has no pre-set job name by folder
+    log.info("  Scanning sub-folders …")
+    _discover_folders_recursive(service, FOLDER_ID, folder_map)
+    log.info("  Found %d sub-folders.", len(folder_map) - 1)
 
-    if not files:
-        log.info("No supported files found in Drive folder.")
+    # 2. Accumulate all files from all folders
+    all_files_to_sync = []
+    for fid, job_name_hint in folder_map.items():
+        files = _list_files(service, fid)
+        for f in files:
+            f["_job_hint"] = job_name_hint # Attach folder name as a job hint
+        all_files_to_sync.extend(files)
+
+    if not all_files_to_sync:
+        log.info("No supported files found in the Drive hierarchy.")
         return
 
-    log.info("Found %d file(s) in Drive folder.", len(files))
+    log.info("Total files to process: %d", len(all_files_to_sync))
     processed = skipped = failed = 0
 
-    for file in files:
+    for file in all_files_to_sync:
         file_id   = file["id"]
         filename  = file["name"]
         mime_type = file["mimeType"]
+        job_hint  = file.get("_job_hint")
 
-        # ── idempotency guard ──────────────────────────────────────────────
         if _is_already_synced(file_id):
-            log.info("  ⏭  Skipping (already synced): %s", filename)
             skipped += 1
             continue
 
-        log.info("  ▶  Processing: %s  (%s)", filename, mime_type)
+        log.info("  ▶  Processing: %s", filename)
 
         try:
-            # 1. Download
+            # Download & Extract
             file_bytes = _download_file(service, file_id, mime_type)
-
-            # 2. Extract raw text
             raw_text = _extract_text(file_bytes, mime_type, filename)
+            
             if not raw_text.strip():
-                log.warning("     No text extracted from %s – skipping.", filename)
                 failed += 1
                 continue
 
-            # 3. Run Claude analysis
-            log.info("     Running Claude CV analysis …")
-            profile = extract_resume_fields(raw_text)
+            # Get existing jobs for AI context
+            existing_jobs = get_existing_jobs()
+            existing_titles = [j.title for j in existing_jobs]
 
-            # 4. Build DB payload
+            # Run Analysis (Guided)
+            profile = extract_resume_fields(raw_text, existing_job_titles=existing_titles)
+
+            # --- DYNAMIC JOB LABELING ---
+            # Priority: 1. Manual Folder Name, 2. AI Extraction, 3. Dynamic Keywords, 4. Uncategorized
+            applied_job = job_hint or profile.applied_job
+            
+            if not applied_job or applied_job == "Uncategorized":
+                lower_file = filename.lower()
+                for job_title in existing_titles:
+                    # Get core keywords from DB job titles
+                    keywords = [k.lower().strip() for k in job_title.split() if len(k) > 3]
+                    if any(k in lower_file for k in keywords):
+                        applied_job = job_title
+                        break
+                
+                applied_job = applied_job or "Uncategorized"
+
+            # Build DB payload
             payload = {
                 "drive_file_id": file_id,
                 "filename":      filename,
@@ -302,29 +380,30 @@ def run_sync():
                 "skills":        profile.skills,
                 "experience":    profile.experience,
                 "education":     profile.education,
+                "applied_job":   applied_job,
             }
 
-            # 5. Save to database
+            # If it was in root, move it to its job folder (auto-organization)
+            if not job_hint:
+                target_folder_id = _get_or_create_folder(service, applied_job, FOLDER_ID)
+                parents = file.get("parents", [FOLDER_ID])
+                for parent_id in parents:
+                    _move_file(service, file_id, parent_id, target_folder_id)
+
+            # Save to database
             saved = _save_to_db(payload)
             if saved:
-                log.info(
-                    "     ✅ Saved → id=%s  name=%s  email=%s",
-                    saved.get("id"), saved.get("name"), saved.get("email"),
-                )
+                log.info("     ✅ Synced → %s", saved.get("name"))
                 processed += 1
             else:
                 failed += 1
 
         except Exception as exc:
-            log.exception("     ❌ Error processing %s: %s", filename, exc)
+            log.exception("     ❌ Error: %s", exc)
             failed += 1
 
     log.info("─" * 60)
-    log.info(
-        "  Sync complete: %d processed | %d skipped | %d failed",
-        processed, skipped, failed,
-    )
-    log.info("─" * 60)
+    log.info("  Pass complete: %d synced | %d skipped | %d failed", processed, skipped, failed)
 
 
 # ── entry-point ────────────────────────────────────────────────────────────────

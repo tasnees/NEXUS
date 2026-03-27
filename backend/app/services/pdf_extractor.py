@@ -1,6 +1,6 @@
 
 import pdfplumber
-from typing import Optional, Dict
+from typing import Optional, Dict, Any, List
 import re
 
 class PDFExtractor:
@@ -8,9 +8,9 @@ class PDFExtractor:
     Service to extract text and structured data from PDF files using pdfplumber.
     """
 
-    def __init__(self, file_path: str = None, file_stream = None):
+    def __init__(self, file_path: Optional[str] = None, file_stream: Any = None):
         """
-        initialize the extractor with a file path or file stream , file is got from the mail
+        initialize the extractor with a file path or file stream
         """
         self.file_path = file_path
         self.file_stream = file_stream
@@ -19,21 +19,21 @@ class PDFExtractor:
         """
         extract raw text from the pdf
         """
-        text = ""
+        text_content: str = ""
         try:
             if self.file_path:
                 with pdfplumber.open(self.file_path) as pdf:
                     for page in pdf.pages:
                         extracted = page.extract_text()
                         if extracted:
-                            text += extracted + "\n"
+                            text_content = f"{text_content}{extracted}\n"
             elif self.file_stream:
                 with pdfplumber.open(self.file_stream) as pdf:
                     for page in pdf.pages:
                         extracted = page.extract_text()
                         if extracted:
-                            text += extracted + "\n"
-            return text.strip()
+                            text_content = f"{text_content}{extracted}\n"
+            return text_content.strip()
         except Exception as e:
             print(f"Error extracting text from PDF: {e}")
             return ""
@@ -42,20 +42,23 @@ class PDFExtractor:
         """
         Try to extract the name (usually at the beginning of the text).
         """
-        lines = text.split('\n')
-        for line in lines[:10]:  # Look in first 10 lines
-            stripped = line.strip()
+        lines = [line.strip() for line in text.split('\n') if line.strip()]
+        # Linter-friendly slicing
+        limit = min(len(lines), 5)
+        for i in range(limit):
+            line = lines[i]
             # Heuristic: Name is usually short, 2-4 words, often first non-empty line
-            if stripped and 2 <= len(stripped.split()) <= 4:
-                if not any(keyword in stripped.lower() for keyword in ["resume", "cv", "curriculum", "vitae", "profile", "email", "phone"]):
-                    return stripped
+            # Avoid lines with numbers (often phone) or @ (often email)
+            if 2 <= len(line.split()) <= 4 and not any(char.isdigit() for char in line) and '@' not in line:
+                if not any(keyword in line.lower() for keyword in ["resume", "cv", "curriculum", "vitae", "profile", "email", "phone", "contact", "address"]):
+                    return line
         return None
 
     def _extract_sections(self, text: str) -> Dict[str, Optional[str]]:
         """
-        Identify and extract common CV sections.
+        Identify and extract common CV sections using more robust header detection.
         """
-        sections = {
+        sections: Dict[str, Optional[str]] = {
             "summary": None,
             "experience": None,
             "education": None,
@@ -63,62 +66,76 @@ class PDFExtractor:
             "projects": None
         }
         
-        keywords = {
-            "summary": ["summary", "professional summary", "objective", "profile", "about me"],
-            "experience": ["experience", "work experience", "employment history", "professional experience", "professional background", "work history", "related experience"],
-            "education": ["education", "academic background", "academic qualifications", "scholastic background", "educational background", "qualification"],
-            "skills": ["skills", "technical skills", "core competencies", "technologies", "expertise", "proficiencies", "skill set"],
-            "projects": ["projects", "personal projects", "academic projects", "key projects", "notable projects"]
+        # Expanded keywords with prefix/suffix flexibility
+        keywords: Dict[str, List[str]] = {
+            "summary": ["summary", "professional summary", "objective", "profile", "about me", "professional profile", "career objective"],
+            "experience": ["experience", "work experience", "employment history", "professional experience", "professional background", "work history", "related experience", "employment"],
+            "education": ["education", "academic background", "academic qualifications", "scholastic background", "educational background", "qualification", "academic history"],
+            "skills": ["skills", "technical skills", "core competencies", "technologies", "expertise", "proficiencies", "skill set", "technical expertise", "skills & tools"],
+            "projects": ["projects", "personal projects", "academic projects", "key projects", "notable projects", "recent projects"]
         }
         
         lines = text.split('\n')
-        current_section = None
-        current_content = []
+        current_section: Optional[str] = None
+        current_content: List[str] = []
 
         for line in lines:
             stripped = line.strip()
             if not stripped:
                 continue
             
-            # Check if line is a section header
-            found_header = False
-            for section_name, header_keys in keywords.items():
-                if any(stripped.lower() == k or stripped.lower() == k + ":" for k in header_keys):
-                    # Save block if we were already in a section
-                    if current_section:
-                        sections[current_section] = "\n".join(current_content).strip()
-                    
-                    current_section = section_name
-                    current_content = []
-                    found_header = True
-                    break
+            # Heuristic for header: short line, maybe all caps, often contains keywords
+            is_header = False
+            lower_line = stripped.lower().rstrip(':')
             
-            if not found_header and current_section:
+            # 1. Exact match or starts with keyword match
+            if len(stripped.split()) <= 5: # Headers are usually short
+                for section_name, header_keys in keywords.items():
+                    if any(lower_line == k or lower_line.startswith(k + " ") or lower_line.startswith(k + ":") for k in header_keys):
+                        # Save previous section block
+                        if current_section:
+                            sections[current_section] = str("\n".join(current_content).strip())
+                        
+                        current_section = section_name
+                        current_content = []
+                        is_header = True
+                        break
+            
+            if not is_header and current_section:
                 current_content.append(stripped)
         
         # Save last section
-        if current_section and current_content:
-            sections[current_section] = "\n".join(current_content).strip()
+        if current_section:
+            sections[current_section] = str("\n".join(current_content).strip())
             
         return sections
 
-    def extract_key_fields(self, text: str) -> Dict[str, any]:
+    def extract_key_fields(self, text: str) -> Dict[str, Any]:
         """
-        Extract basic fields and structured sections from CV text.
+        Extract basic fields and structured sections from CV text with improved regex and heuristics.
         """
+        # Improved email regex
         email_pattern = r'[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}'
-        phone_pattern = r'(\+\d{1,3}[-.]?)?\(?\d{3}\)?[-.]?\d{3}[-.]?\d{4}'
         
-        email = re.search(email_pattern, text)
-        phone = re.search(phone_pattern, text)
+        # Improved phone regex (handles common formats like (123) 456-7890, +1 123-456-7890, etc.)
+        phone_pattern = r'(\+?\d{1,3}[-.\s]?)?\(?\d{2,4}\)?[-.\s]?\d{3,4}[-.\s]?\d{4}'
+        
+        emails = re.findall(email_pattern, text)
+        phones = re.findall(phone_pattern, text)
         
         name = self._extract_name(text)
         sections = self._extract_sections(text)
 
+        # Filter out short or mostly empty sections
+        for key in list(sections.keys()):
+            val = sections[key]
+            if val and len(str(val)) < 20: 
+                sections[key] = None
+
         return {
             "name": name,
-            "email": email.group(0) if email else None,
-            "phone": phone.group(0) if phone else None,
+            "email": emails[0] if emails else None,
+            "phone": phones[0] if phones else None,
             "education": sections.get("education"),
             "experience": sections.get("experience"),
             "skills": sections.get("skills"),

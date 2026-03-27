@@ -14,6 +14,12 @@ interface CandidateData {
     experience: string[];
     education: string[];
     raw_text: string;
+    assessment_results?: Array<{
+        assessment_id: number;
+        grade: string;
+        feedback: string;
+        submitted_at: string;
+    }>;
 }
 
 interface SkillBar {
@@ -109,6 +115,11 @@ const CandidateProfile: React.FC = () => {
     const [candidate, setCandidate] = useState<CandidateData | null>(null);
     const [loading, setLoading] = useState(true);
 
+    // Popup state
+    const [showPopup, setShowPopup] = useState(false);
+    const [popupMessage, setPopupMessage] = useState('');
+    const [popupType, setPopupType] = useState<'success' | 'error'>('success');
+
     useEffect(() => {
         const fetchCandidate = async () => {
             try {
@@ -150,8 +161,18 @@ const CandidateProfile: React.FC = () => {
                 body: JSON.stringify(candidateDetails),
             });
             console.log('Webhook dispatched to Make.com via Hire');
+            
+            setPopupMessage(`Hire email successfully sent to ${candidate.email}!`);
+            setPopupType('success');
+            setShowPopup(true);
+            setTimeout(() => setShowPopup(false), 5000);
         } catch (error) {
             console.error('Failed to dispatch Hire webhook:', error);
+            
+            setPopupMessage(`Failed to send hire email to ${candidate.email}.`);
+            setPopupType('error');
+            setShowPopup(true);
+            setTimeout(() => setShowPopup(false), 5000);
         }
     };
 
@@ -170,8 +191,18 @@ const CandidateProfile: React.FC = () => {
                 body: JSON.stringify(candidateDetails),
             });
             console.log('Webhook dispatched to Make.com via Reject');
+            
+            setPopupMessage(`Rejection email successfully sent to ${candidate.email}!`);
+            setPopupType('success');
+            setShowPopup(true);
+            setTimeout(() => setShowPopup(false), 5000);
         } catch (error) {
             console.error('Failed to dispatch Reject webhook:', error);
+            
+            setPopupMessage(`Failed to send rejection email to ${candidate.email}.`);
+            setPopupType('error');
+            setShowPopup(true);
+            setTimeout(() => setShowPopup(false), 5000);
         }
     };
 
@@ -196,7 +227,20 @@ const CandidateProfile: React.FC = () => {
     ];
 
     return (
-        <div className="flex-1 bg-off-white min-h-screen" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>
+        <div className="flex-1 bg-off-white min-h-screen relative" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>
+            {/* Pop-up Notification */}
+            {showPopup && (
+                <div className={`fixed top-6 right-6 z-50 px-6 py-4 rounded-xl shadow-2xl flex items-center gap-3 transition-opacity duration-300 border-l-4 ${popupType === 'success' ? 'bg-white border-l-green-500 text-slate-800' : 'bg-white border-l-red-500 text-slate-800'}`}>
+                    <span className={`material-symbols-outlined ${popupType === 'success' ? 'text-green-500' : 'text-red-500'}`}>
+                        {popupType === 'success' ? 'check_circle' : 'error'}
+                    </span>
+                    <span className="font-bold text-sm tracking-tight">{popupMessage}</span>
+                    <button onClick={() => setShowPopup(false)} className="ml-4 opacity-50 hover:opacity-100 transition-opacity flex items-center">
+                        <span className="material-symbols-outlined text-sm">close</span>
+                    </button>
+                </div>
+            )}
+            
             {/* ─── Local Header & Actions ─── */}
             <div className="bg-white border-b border-accent/20 px-6 py-4 shadow-sm flex items-center justify-between">
                 <div>
@@ -319,6 +363,42 @@ const CandidateProfile: React.FC = () => {
                             </div>
                         </div>
                     </div>
+
+                    {/* Assessment Results (Phase 2: Project Work) */}
+                    {candidate.assessment_results && candidate.assessment_results.length > 0 && (
+                        <div className="glass-panel rounded-xl p-6 shadow-sm border-l-4 border-l-primary">
+                            <div className="flex items-center justify-between mb-6">
+                                <div>
+                                    <h3 className="text-xl font-bold">Phase 2: Project Evaluation</h3>
+                                    <p className="text-sm text-accent">AI-Powered Skill Validation</p>
+                                </div>
+                                <span className="bg-primary/10 text-primary text-[10px] font-black px-2 py-1 rounded tracking-widest">
+                                    VERIFIED
+                                </span>
+                            </div>
+                            <div className="space-y-4">
+                                {candidate.assessment_results.map((res, idx) => (
+                                    <div key={idx} className="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm flex flex-col gap-3">
+                                        <div className="flex justify-between items-center">
+                                            <div className="flex items-center gap-2">
+                                                <span className="material-symbols-outlined text-primary text-lg">verified</span>
+                                                <span className="text-sm font-bold text-slate-800">Assessment Node #{res.assessment_id}</span>
+                                            </div>
+                                            <div className="px-4 py-1.5 bg-slate-900 text-white rounded-xl text-lg font-black shadow-lg">
+                                                {res.grade}
+                                            </div>
+                                        </div>
+                                        <p className="text-xs text-slate-500 italic leading-relaxed bg-slate-50 p-4 rounded-xl border border-slate-100">
+                                            "{res.feedback}"
+                                        </p>
+                                        <p className="text-[10px] text-slate-400 font-bold uppercase tracking-[0.2em] mt-1">
+                                            Evaluation Date: {new Date(res.submitted_at).toLocaleDateString()}
+                                        </p>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    )}
 
                     {/* Summary / About */}
                     <div className="glass-panel rounded-xl p-6 shadow-sm">

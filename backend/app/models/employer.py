@@ -12,9 +12,8 @@ class UserRole(str, enum.Enum):
 class User(Base):
     __tablename__ = "users"
 
-    id = Column(Integer, primary_key=True, index=True)
-    full_name = Column(String)
-    email = Column(String, unique=True, index=True)
-    company_name = Column(String)
-    role = Column(String) 
-    hashed_password = Column(String)
+    user_id = Column(Integer, primary_key=True, index=True)
+    name = Column(String, nullable=True) 
+    email = Column(String, unique=True, index=True, nullable=False)
+    password = Column(String, nullable=False) 
+    role = Column(String, nullable=True)

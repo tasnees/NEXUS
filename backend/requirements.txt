@@ -3,7 +3,8 @@ uvicorn
 sqlalchemy
 pydantic-settings
 python-dotenv
-passlib[bcrypt]
+passlib==1.7.4
+bcrypt==3.2.2
 python-jose[cryptography]
 python-multipart
 psycopg2-binary
@@ -14,8 +15,6 @@ anthropic
 pdfplumber
 PyPDF2
 python-docx
-google-api-python-client 
-google-auth-httplib2
-google-auth-oauthlib
 pandas
-puter-python-sdk 
+puter-python-sdk>=0.0.18
+email-validator

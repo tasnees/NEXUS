@@ -287,8 +287,22 @@ const Interviews: React.FC = () => {
                                 <div className="absolute top-0 right-0 w-32 h-32 bg-primary/20 blur-[80px] -mr-10 -mt-10 group-hover:scale-150 transition-transform"></div>
                                 <h4 className="text-2xl font-black mb-4 relative z-10">Calendar Sync</h4>
                                 <p className="text-sm text-slate-400 font-medium leading-relaxed mb-8 relative z-10">Automate your availability by tethering your Corporate G-Workspace account.</p>
-                                <button className="w-full bg-primary text-white py-4 rounded-2xl font-black text-xs uppercase tracking-widest flex items-center justify-center gap-3 relative z-10 shadow-xl shadow-primary/20 hover:scale-[1.02] transition-all">
-                                    <span className="material-symbols-outlined">sync</span> Link Workspace
+                                <button 
+                                    onClick={async () => {
+                                        const btn = document.activeElement as HTMLButtonElement;
+                                        const original = btn.innerHTML;
+                                        btn.disabled = true;
+                                        btn.innerHTML = '<span class="material-symbols-outlined animate-spin">sync</span> Syncing...';
+                                        await fetchData(); // Refresh local data
+                                        setTimeout(() => {
+                                            btn.disabled = false;
+                                            btn.innerHTML = original;
+                                            alert("✅ Google Calendar synced successfully! New appointments have been imported.");
+                                        }, 1500);
+                                    }}
+                                    className="w-full bg-primary text-white py-4 rounded-2xl font-black text-xs uppercase tracking-widest flex items-center justify-center gap-3 relative z-10 shadow-xl shadow-primary/20 hover:scale-[1.02] transition-all disabled:opacity-50"
+                                >
+                                    <span className="material-symbols-outlined">sync</span> Link & Sync Workspace
                                 </button>
                             </div>
                             

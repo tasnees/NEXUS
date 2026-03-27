@@ -1,5 +1,5 @@
 import React from 'react';
-import { Link, useLocation } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 
 interface MainLayoutProps {
     children: React.ReactNode;
@@ -7,6 +7,14 @@ interface MainLayoutProps {
 
 const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
     const location = useLocation();
+    const navigate = useNavigate();
+
+    const handleLogout = () => {
+        // Clear any auth tokens/state if necessary
+        localStorage.clear();
+        sessionStorage.clear();
+        navigate('/login');
+    };
     
     const navItems = [
         { name: 'Dashboard', icon: 'dashboard', path: '/dashboard' },
@@ -75,7 +83,7 @@ const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
                             <p className="text-xs font-bold text-white truncate">Marcus Chen</p>
                             <p className="text-[9px] text-[#778da9] font-bold uppercase tracking-wider">Lead Recruiter</p>
                         </div>
-                        <button className="ml-auto text-[#778da9] hover:text-white transition-colors">
+                        <button onClick={handleLogout} className="ml-auto text-[#778da9] hover:text-white transition-colors">
                             <span className="material-symbols-outlined text-lg">logout</span>
                         </button>
                     </div>

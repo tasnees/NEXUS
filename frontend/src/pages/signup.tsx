@@ -4,7 +4,7 @@ import { useNavigate, Link } from 'react-router-dom';
 const Signup: React.FC = () => {
     const navigate = useNavigate();
     const [formData, setFormData] = useState({
-        full_name: '',
+        name: '',
         email: '',
         company_name: '',
         role: '',
@@ -47,7 +47,7 @@ const Signup: React.FC = () => {
         setError(null);
 
         try {
-            const response = await fetch('http://localhost:8000/api/v1/auth/signup', {
+            const response = await fetch('http://localhost:8001/api/v1/auth/signup', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -131,6 +131,21 @@ const Signup: React.FC = () => {
                             </div>
                         </div>
                         
+                        <div className="flex p-1 bg-slate-200 dark:bg-slate-800 rounded-lg mb-8">
+                            <button 
+                                onClick={() => navigate('/login')}
+                                className="flex-1 py-2.5 text-sm font-semibold rounded-md text-slate-500 dark:text-slate-400 hover:text-navy-deep dark:hover:text-white transition-all"
+                            >
+                                Login
+                            </button>
+                            <button 
+                                onClick={() => navigate('/signup')}
+                                className="flex-1 py-2.5 text-sm font-bold rounded-md bg-white dark:bg-primary shadow-md text-navy-deep dark:text-white transition-all"
+                            >
+                                Sign Up
+                            </button>
+                        </div>
+
                         <div className="mb-10 text-center lg:text-left">
                             <h2 className="text-3xl font-bold text-slate-900 dark:text-white mb-2">Recruiter Sign Up</h2>
                             <p className="text-slate-500 dark:text-slate-400">Get started with your 14-day free trial.</p>
@@ -147,15 +162,15 @@ const Signup: React.FC = () => {
                             <div className="grid grid-cols-1 gap-5">
                                 {/* Full Name */}
                                 <div>
-                                    <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5" htmlFor="full_name">Full Name</label>
+                                    <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5" htmlFor="name">Full Name</label>
                                     <input 
                                         className="w-full px-4 py-3 bg-white dark:bg-background-dark border border-slate-300 dark:border-slate-700 rounded-lg focus:ring-2 focus:ring-primary/50 focus:border-primary outline-none transition-all duration-200 text-slate-900 dark:text-white" 
-                                        id="full_name" 
-                                        name="full_name" 
+                                        id="name" 
+                                        name="name" 
                                         placeholder="Enter your full name" 
                                         required 
                                         type="text"
-                                        value={formData.full_name}
+                                        value={formData.name}
                                         onChange={handleChange}
                                     />
                                 </div>
@@ -223,6 +238,7 @@ const Signup: React.FC = () => {
                                         type="password"
                                         value={formData.password}
                                         onChange={handleChange}
+                                        maxLength={72}
                                     />
                                     <p className="mt-1.5 text-xs text-slate-400">Must include a symbol and a number.</p>
                                 </div>

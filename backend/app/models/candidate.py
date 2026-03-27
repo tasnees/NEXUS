@@ -24,6 +24,9 @@ class Candidate(Base):
     experience      = Column(JSON, default=list)     # ["Title at Co (dates): desc", ...]
     education       = Column(JSON, default=list)     # ["BSc CS, MIT (2020)", ...]
     applied_job     = Column(String, nullable=True)  # "Senior Neural Architect", etc.
+    
+    # New Field for Assessment Results
+    assessment_results = Column(JSON, default=list) # [{"assessment_id": 1, "grade": "A", "feedback": "..."}]
 
     # --- raw text (useful for re-analysis later) ---
     raw_text        = Column(String, nullable=True)

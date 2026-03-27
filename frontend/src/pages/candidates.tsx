@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 
 // --- Types ---
@@ -12,6 +12,14 @@ interface Candidate {
     quizBadge?: string;
     sentiment: 'highly_positive' | 'positive' | 'neutral' | 'negative';
     status: 'shortlisted' | 'interviewed' | 'new' | 'rejected';
+    applied_job?: string;
+}
+
+interface UpdatePayload {
+    name: string;
+    email: string;
+    applied_job: string;
+    summary: string;
 }
 
 interface FilterState {
@@ -160,6 +168,207 @@ const StatusBadge: React.FC<{ status: Candidate['status'] }> = ({ status }) => {
     );
 };
 
+// --- Action Dropdown ---
+const ActionMenu: React.FC<{
+    candidate: Candidate;
+    onUpdate: (c: Candidate) => void;
+    onDelete: (c: Candidate) => void;
+}> = ({ candidate, onUpdate, onDelete }) => {
+    const [open, setOpen] = useState(false);
+    const ref = useRef<HTMLDivElement>(null);
+
+    useEffect(() => {
+        const handler = (e: MouseEvent) => {
+            if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+        };
+        document.addEventListener('mousedown', handler);
+        return () => document.removeEventListener('mousedown', handler);
+    }, []);
+
+    return (
+        <div className="relative" ref={ref}>
+            <button
+                className="text-accent hover:text-primary p-1.5 rounded-lg hover:bg-slate-100 transition-colors"
+                onClick={(e) => { e.stopPropagation(); setOpen((o) => !o); }}
+                title="Actions"
+            >
+                <span className="material-symbols-outlined">more_vert</span>
+            </button>
+
+            {open && (
+                <div className="absolute right-0 z-50 mt-1 w-44 bg-white rounded-xl shadow-lg border border-accent/10 overflow-hidden animate-fade-in">
+                    <button
+                        className="w-full flex items-center gap-2.5 px-4 py-3 text-sm font-semibold text-slate-700 hover:bg-primary/5 hover:text-primary transition-colors"
+                        onClick={(e) => { e.stopPropagation(); setOpen(false); onUpdate(candidate); }}
+                    >
+                        <span className="material-symbols-outlined text-base text-primary">edit</span>
+                        Update Candidate
+                    </button>
+                    <div className="border-t border-accent/10" />
+                    <button
+                        className="w-full flex items-center gap-2.5 px-4 py-3 text-sm font-semibold text-red-600 hover:bg-red-50 transition-colors"
+                        onClick={(e) => { e.stopPropagation(); setOpen(false); onDelete(candidate); }}
+                    >
+                        <span className="material-symbols-outlined text-base">delete</span>
+                        Delete Candidate
+                    </button>
+                </div>
+            )}
+        </div>
+    );
+};
+
+// --- Update Modal ---
+const UpdateModal: React.FC<{
+    candidate: Candidate;
+    onClose: () => void;
+    onSaved: (updated: Candidate) => void;
+}> = ({ candidate, onClose, onSaved }) => {
+    const [form, setForm] = useState<UpdatePayload>({
+        name: candidate.name,
+        email: '',
+        applied_job: candidate.applied_job || '',
+        summary: '',
+    });
+    const [saving, setSaving] = useState(false);
+    const [error, setError] = useState('');
+
+    const handleSubmit = async (e: React.FormEvent) => {
+        e.preventDefault();
+        setSaving(true);
+        setError('');
+        try {
+            const res = await fetch(`http://localhost:8001/api/v1/candidates/${candidate.id}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(form),
+            });
+            if (!res.ok) throw new Error((await res.json()).detail || 'Update failed');
+            const data = await res.json();
+            onSaved({
+                ...candidate,
+                name: data.name || candidate.name,
+                applied_job: data.applied_job,
+                avatar: `https://ui-avatars.com/api/?name=${encodeURIComponent(data.name || candidate.name)}&background=random`,
+            });
+        } catch (err: any) {
+            setError(err.message);
+        } finally {
+            setSaving(false);
+        }
+    };
+
+    return (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm" onClick={onClose}>
+            <div
+                className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-8 relative animate-fade-in"
+                onClick={(e) => e.stopPropagation()}
+            >
+                <button className="absolute top-4 right-4 text-accent hover:text-primary transition-colors" onClick={onClose}>
+                    <span className="material-symbols-outlined">close</span>
+                </button>
+                <h2 className="text-lg font-extrabold text-slate-800 mb-1">Update Candidate</h2>
+                <p className="text-sm text-accent mb-6">Edit the profile details below.</p>
+
+                <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+                    <div>
+                        <label className="block text-xs font-bold text-accent uppercase mb-1">Full Name</label>
+                        <input
+                            className="w-full border border-accent/20 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 transition"
+                            value={form.name}
+                            onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
+                        />
+                    </div>
+                    <div>
+                        <label className="block text-xs font-bold text-accent uppercase mb-1">Email</label>
+                        <input
+                            type="email"
+                            className="w-full border border-accent/20 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 transition"
+                            value={form.email}
+                            onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))}
+                            placeholder="(leave blank to keep existing)"
+                        />
+                    </div>
+                    <div>
+                        <label className="block text-xs font-bold text-accent uppercase mb-1">Applied Job</label>
+                        <input
+                            className="w-full border border-accent/20 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 transition"
+                            value={form.applied_job}
+                            onChange={(e) => setForm((f) => ({ ...f, applied_job: e.target.value }))}
+                        />
+                    </div>
+                    <div>
+                        <label className="block text-xs font-bold text-accent uppercase mb-1">Summary</label>
+                        <textarea
+                            rows={3}
+                            className="w-full border border-accent/20 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 transition resize-none"
+                            value={form.summary}
+                            onChange={(e) => setForm((f) => ({ ...f, summary: e.target.value }))}
+                            placeholder="(leave blank to keep existing)"
+                        />
+                    </div>
+                    {error && <p className="text-xs text-red-600 font-semibold">{error}</p>}
+                    <div className="flex gap-3 pt-2">
+                        <button type="button" onClick={onClose} className="flex-1 py-2 rounded-lg border border-accent/20 text-sm font-bold text-accent hover:bg-slate-50 transition">Cancel</button>
+                        <button type="submit" disabled={saving} className="flex-1 py-2 rounded-lg bg-primary text-white text-sm font-bold hover:bg-primary/90 transition disabled:opacity-50">
+                            {saving ? 'Saving...' : 'Save Changes'}
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    );
+};
+
+// --- Delete Confirm Modal ---
+const DeleteConfirmModal: React.FC<{
+    candidate: Candidate;
+    onClose: () => void;
+    onDeleted: (id: number) => void;
+}> = ({ candidate, onClose, onDeleted }) => {
+    const [deleting, setDeleting] = useState(false);
+    const [error, setError] = useState('');
+
+    const handleDelete = async () => {
+        setDeleting(true);
+        setError('');
+        try {
+            const res = await fetch(`http://localhost:8001/api/v1/candidates/${candidate.id}`, { method: 'DELETE' });
+            if (res.status !== 204 && !res.ok) throw new Error('Delete failed');
+            onDeleted(candidate.id);
+        } catch (err: any) {
+            setError(err.message);
+            setDeleting(false);
+        }
+    };
+
+    return (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm" onClick={onClose}>
+            <div
+                className="bg-white rounded-2xl shadow-2xl w-full max-w-sm p-8 relative animate-fade-in"
+                onClick={(e) => e.stopPropagation()}
+            >
+                <div className="flex flex-col items-center text-center gap-3 mb-6">
+                    <div className="w-14 h-14 rounded-full bg-red-100 flex items-center justify-center">
+                        <span className="material-symbols-outlined text-3xl text-red-600">person_remove</span>
+                    </div>
+                    <h2 className="text-lg font-extrabold text-slate-800">Delete Candidate?</h2>
+                    <p className="text-sm text-accent">
+                        Are you sure you want to permanently remove <span className="font-bold text-slate-700">{candidate.name}</span>? This action cannot be undone.
+                    </p>
+                </div>
+                {error && <p className="text-xs text-red-600 font-semibold text-center mb-3">{error}</p>}
+                <div className="flex gap-3">
+                    <button onClick={onClose} className="flex-1 py-2 rounded-lg border border-accent/20 text-sm font-bold text-accent hover:bg-slate-50 transition">Cancel</button>
+                    <button onClick={handleDelete} disabled={deleting} className="flex-1 py-2 rounded-lg bg-red-600 text-white text-sm font-bold hover:bg-red-700 transition disabled:opacity-50">
+                        {deleting ? 'Deleting...' : 'Yes, Delete'}
+                    </button>
+                </div>
+            </div>
+        </div>
+    );
+};
+
 // --- Main Component ---
 
 const Candidates: React.FC = () => {
@@ -173,9 +382,10 @@ const Candidates: React.FC = () => {
         search: '',
         activeRoleFilter: jobFilter,
     });
+    const [updateTarget, setUpdateTarget] = useState<Candidate | null>(null);
+    const [deleteTarget, setDeleteTarget] = useState<Candidate | null>(null);
 
     useEffect(() => {
-        // ... (rest of useEffect)
         const fetchCandidates = async () => {
             try {
                 const response = await fetch('http://localhost:8001/api/v1/candidates/');
@@ -186,12 +396,13 @@ const Candidates: React.FC = () => {
                 const mapped: Candidate[] = data.map((c: any) => ({
                     id: c.id,
                     name: c.name || "Anonymous",
-                    role: c.skills?.[0] || "Applicant", // Use first skill as role for now
+                    role: c.skills?.[0] || "Applicant",
                     avatar: `https://ui-avatars.com/api/?name=${encodeURIComponent(c.name || 'A')}&background=random`,
-                    aiScore: 70 + (c.skills?.length || 0) * 2, // Heuristic score
+                    aiScore: 70 + (c.skills?.length || 0) * 2,
                     quizScore: 75,
                     sentiment: 'positive' as const,
                     status: 'new' as const,
+                    applied_job: c.applied_job,
                 }));
                 
                 setCandidates(mapped);
@@ -204,6 +415,16 @@ const Candidates: React.FC = () => {
         fetchCandidates();
     }, []);
 
+    const handleCandidateUpdated = (updated: Candidate) => {
+        setCandidates((prev) => prev.map((c) => (c.id === updated.id ? { ...c, ...updated } : c)));
+        setUpdateTarget(null);
+    };
+
+    const handleCandidateDeleted = (id: number) => {
+        setCandidates((prev) => prev.filter((c) => c.id !== id));
+        setDeleteTarget(null);
+    };
+
     const [currentPage, setCurrentPage] = useState<number>(1);
 
     const filteredCandidates = candidates.filter((c) => {
@@ -212,10 +433,12 @@ const Candidates: React.FC = () => {
             c.name.toLowerCase().includes(filters.search.toLowerCase()) ||
             c.role.toLowerCase().includes(filters.search.toLowerCase());
 
+        const activeFilter = filters.activeRoleFilter?.toLowerCase() || '';
         const matchesRole =
             !filters.activeRoleFilter ||
-            c.role.toLowerCase().includes(filters.activeRoleFilter.toLowerCase()) ||
-            filters.activeRoleFilter.toLowerCase().includes(c.role.toLowerCase());
+            (c.applied_job && c.applied_job.toLowerCase().includes(activeFilter)) ||
+            c.role.toLowerCase().includes(activeFilter) ||
+            activeFilter.includes(c.role.toLowerCase());
 
         return matchesSearch && matchesRole;
     });
@@ -225,6 +448,21 @@ const Candidates: React.FC = () => {
     };
 
     return (
+        <>
+        {updateTarget && (
+            <UpdateModal
+                candidate={updateTarget}
+                onClose={() => setUpdateTarget(null)}
+                onSaved={handleCandidateUpdated}
+            />
+        )}
+        {deleteTarget && (
+            <DeleteConfirmModal
+                candidate={deleteTarget}
+                onClose={() => setDeleteTarget(null)}
+                onDeleted={handleCandidateDeleted}
+            />
+        )}
         <div className="flex-1 flex flex-col overflow-hidden bg-[#f0f1f0]" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>
             {/* ─── Main Content ─── */}
             <main className="flex-1 flex flex-col overflow-hidden">
@@ -245,6 +483,33 @@ const Candidates: React.FC = () => {
                         </div>
                     </div>
                     <div className="flex items-center gap-3">
+                        <button 
+                            onClick={async (e) => {
+                                e.stopPropagation();
+                                const btn = e.currentTarget;
+                                btn.disabled = true;
+                                const originalText = btn.innerHTML;
+                                btn.innerHTML = '<span class="material-symbols-outlined text-lg animate-spin">sync</span> Syncing...';
+                                try {
+                                    const res = await fetch('http://localhost:8001/api/v1/sync/', { method: 'POST' });
+                                    if (res.ok) {
+                                        alert("🚀 Sync started in background! Candidates will appear shortly.");
+                                    } else {
+                                        const err = await res.json();
+                                        alert("❌ Sync failed: " + (err.detail || "Unknown error"));
+                                    }
+                                } catch (err) {
+                                    alert("❌ Connection error: " + err);
+                                } finally {
+                                    btn.disabled = false;
+                                    btn.innerHTML = originalText;
+                                }
+                            }}
+                            className="bg-accent hover:bg-accent/90 text-white flex items-center gap-2 px-5 py-2 rounded-lg text-sm font-bold transition-all shadow-sm active:scale-95 disabled:opacity-50"
+                        >
+                            <span className="material-symbols-outlined text-lg">cloud_sync</span>
+                            Sync CVs from Drive
+                        </button>
                         <button className="bg-primary hover:bg-primary/90 text-white flex items-center gap-2 px-5 py-2 rounded-lg text-sm font-bold transition-all shadow-sm active:scale-95">
                             <span className="material-symbols-outlined text-lg">compare_arrows</span>
                             Compare Candidates
@@ -319,57 +584,87 @@ const Candidates: React.FC = () => {
                                             Loading Candidates...
                                         </td>
                                     </tr>
-                                ) : filteredCandidates.map((candidate) => (
-                                    <tr
-                                        key={candidate.id}
-                                        className="hover:bg-slate-50/50 transition-colors group cursor-pointer"
-                                        onClick={() => navigate(`/candidate/${candidate.id}`)}
-                                    >
-                                        {/* Candidate Info */}
-                                        <td className="px-6 py-4">
-                                            <div className="flex items-center gap-3">
-                                                <img
-                                                    alt={candidate.name}
-                                                    className="w-10 h-10 rounded-lg object-cover border border-accent/20 shadow-sm"
-                                                    src={candidate.avatar}
-                                                />
-                                                <div className="flex flex-col">
-                                                    <span className="text-sm font-bold text-slate-800 group-hover:text-primary transition-colors">
-                                                        {candidate.name}
-                                                    </span>
-                                                    <span className="text-xs text-accent">{candidate.role}</span>
-                                                </div>
-                                            </div>
-                                        </td>
+                                ) : (
+                                    (() => {
+                                        const grouped = filteredCandidates.reduce((acc, c) => {
+                                            const job = c.applied_job || 'Uncategorized';
+                                            if (!acc[job]) acc[job] = [];
+                                            acc[job].push(c);
+                                            return acc;
+                                        }, {} as Record<string, Candidate[]>);
 
-                                        {/* AI Score */}
-                                        <td className="px-6 py-4">
-                                            <AiScoreCircle score={candidate.aiScore} />
-                                        </td>
+                                        return Object.entries(grouped).map(([job, jobCandidates]) => (
+                                            <React.Fragment key={job}>
+                                                <tr className="bg-[#f8f9fa] border-l-4 border-primary">
+                                                    <td colSpan={6} className="px-6 py-3">
+                                                        <div className="flex items-center gap-2">
+                                                            <span className="material-symbols-outlined text-primary text-sm">work</span>
+                                                            <span className="text-xs font-black text-slate-700 uppercase tracking-widest">
+                                                                {job}
+                                                            </span>
+                                                            <span className="bg-primary/10 text-primary text-[10px] font-bold px-1.5 py-0.5 rounded-full">
+                                                                {jobCandidates.length}
+                                                            </span>
+                                                        </div>
+                                                    </td>
+                                                </tr>
+                                                {jobCandidates.map((candidate) => (
+                                                    <tr
+                                                        key={candidate.id}
+                                                        className="hover:bg-slate-50/50 transition-colors group cursor-pointer"
+                                                        onClick={() => navigate(`/candidate/${candidate.id}`)}
+                                                    >
+                                                        {/* Candidate Info */}
+                                                        <td className="px-6 py-4">
+                                                            <div className="flex items-center gap-3">
+                                                                <img
+                                                                    alt={candidate.name}
+                                                                    className="w-10 h-10 rounded-lg object-cover border border-accent/20 shadow-sm"
+                                                                    src={candidate.avatar}
+                                                                />
+                                                                <div className="flex flex-col">
+                                                                    <span className="text-sm font-bold text-slate-800 group-hover:text-primary transition-colors">
+                                                                        {candidate.name}
+                                                                    </span>
+                                                                    <span className="text-xs text-accent">{candidate.role}</span>
+                                                                </div>
+                                                            </div>
+                                                        </td>
 
-                                        {/* Tech Quiz */}
-                                        <td className="px-6 py-4">
-                                            <QuizBar score={candidate.quizScore} badge={candidate.quizBadge} />
-                                        </td>
+                                                        {/* AI Score */}
+                                                        <td className="px-6 py-4 text-center">
+                                                            <AiScoreCircle score={candidate.aiScore} />
+                                                        </td>
 
-                                        {/* Interview Sentiment */}
-                                        <td className="px-6 py-4">
-                                            <SentimentBadge sentiment={candidate.sentiment} />
-                                        </td>
+                                                        {/* Tech Quiz */}
+                                                        <td className="px-6 py-4">
+                                                            <QuizBar score={candidate.quizScore} badge={candidate.quizBadge} />
+                                                        </td>
 
-                                        {/* Status */}
-                                        <td className="px-6 py-4">
-                                            <StatusBadge status={candidate.status} />
-                                        </td>
+                                                        {/* Interview Sentiment */}
+                                                        <td className="px-6 py-4">
+                                                            <SentimentBadge sentiment={candidate.sentiment} />
+                                                        </td>
 
-                                        {/* Actions */}
-                                        <td className="px-6 py-4">
-                                            <button className="text-accent hover:text-primary p-1 rounded-lg hover:bg-slate-100 transition-colors">
-                                                <span className="material-symbols-outlined">more_vert</span>
-                                            </button>
-                                        </td>
-                                    </tr>
-                                ))}
+                                                        {/* Status */}
+                                                        <td className="px-6 py-4">
+                                                            <StatusBadge status={candidate.status} />
+                                                        </td>
+
+                                                        {/* Actions */}
+                                                        <td className="px-6 py-4 text-right">
+                                                            <ActionMenu
+                                                                candidate={candidate}
+                                                                onUpdate={setUpdateTarget}
+                                                                onDelete={setDeleteTarget}
+                                                            />
+                                                        </td>
+                                                    </tr>
+                                                ))}
+                                            </React.Fragment>
+                                        ));
+                                    })()
+                                )}
                             </tbody>
                         </table>
 
@@ -419,7 +714,7 @@ const Candidates: React.FC = () => {
                 </div>
             </main>
         </div>
-
+        </>
     );
 };
 

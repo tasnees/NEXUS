@@ -22,10 +22,9 @@ interface JobGroup {
 
 // --- Sub-Components ---
 
-const AssessmentCard: React.FC<{ assessment: Assessment; onLaunch: () => void }> = ({ assessment, onLaunch }) => (
+const AssessmentCard: React.FC<{ assessment: Assessment; onLaunch: () => void; onSchedule: () => void; onEdit: () => void; onDelete: () => void; onViewSubmissions: () => void }> = ({ assessment, onLaunch, onSchedule, onEdit, onDelete, onViewSubmissions }) => (
     <div className="bg-white p-6 rounded-2xl border border-accent/10 shadow-soft hover:shadow-xl hover:-translate-y-1 transition-all group flex flex-col justify-between h-full">
         <div>
-            {/* ... rest of card ... */}
             <div className="flex justify-between items-start mb-4">
                 <div className={`px-3 py-1 rounded-lg text-[10px] font-black uppercase tracking-widest border transition-colors ${
                     assessment.difficulty === 'Expert' ? 'bg-red-50 text-red-600 border-red-100' :
@@ -34,9 +33,21 @@ const AssessmentCard: React.FC<{ assessment: Assessment; onLaunch: () => void }>
                 }`}>
                     {assessment.difficulty} Challenge
                 </div>
-                <div className="flex items-center gap-1 text-accent">
-                    <span className="material-symbols-outlined text-sm">schedule</span>
-                    <span className="text-[10px] font-bold">{assessment.duration}</span>
+                <div className="flex items-center gap-2">
+                    <button 
+                        onClick={onDelete}
+                        className="w-8 h-8 rounded-full bg-slate-50 flex items-center justify-center text-slate-400 hover:text-red-500 transition-colors"
+                        title="Delete Assessment"
+                    >
+                        <span className="material-symbols-outlined text-sm">delete</span>
+                    </button>
+                    <button 
+                        onClick={onEdit}
+                        className="w-8 h-8 rounded-full bg-slate-50 flex items-center justify-center text-slate-400 hover:text-primary transition-colors"
+                        title="Edit Assessment"
+                    >
+                        <span className="material-symbols-outlined text-sm">edit</span>
+                    </button>
                 </div>
             </div>
             <h4 className="text-xl font-bold text-slate-800 mb-2 group-hover:text-primary transition-colors">{assessment.title}</h4>
@@ -51,13 +62,29 @@ const AssessmentCard: React.FC<{ assessment: Assessment; onLaunch: () => void }>
             </div>
         </div>
 
-        <button 
-            onClick={onLaunch}
-            className="w-full py-3 bg-slate-800 text-white rounded-xl text-sm font-bold flex items-center justify-center gap-2 hover:bg-primary transition-all active:scale-95 group/btn shadow-lg shadow-slate-200"
-        >
-            <span className="material-symbols-outlined text-lg group-hover/btn:rotate-12 transition-transform">bolt</span>
-            Launch Assessment
-        </button>
+        <div className="flex gap-2">
+            <button 
+                onClick={onLaunch}
+                className="flex-1 py-3 bg-slate-800 text-white rounded-xl text-sm font-bold flex items-center justify-center gap-2 hover:bg-primary transition-all active:scale-95 group/btn shadow-lg shadow-slate-200"
+            >
+                <span className="material-symbols-outlined text-lg group-hover/btn:rotate-12 transition-transform">bolt</span>
+                Launch
+            </button>
+            <button 
+                onClick={onSchedule}
+                className="flex-1 py-3 bg-white border border-accent/20 text-slate-800 rounded-xl text-sm font-bold flex items-center justify-center gap-2 hover:bg-slate-50 transition-all active:scale-95 group/btn shadow-soft"
+            >
+                <span className="material-symbols-outlined text-lg group-hover/btn:scale-110 transition-transform">calendar_month</span>
+                Schedule
+            </button>
+            <button 
+                onClick={onViewSubmissions}
+                className="w-12 py-3 bg-slate-50 border border-slate-100 text-slate-400 rounded-xl flex items-center justify-center hover:bg-primary/5 hover:text-primary transition-all group/sub"
+                title="View Submissions"
+            >
+                <span className="material-symbols-outlined text-lg group-hover/sub:scale-110 transition-transform">visibility</span>
+            </button>
+        </div>
     </div>
 );
 
@@ -75,6 +102,9 @@ const Assessments: React.FC = () => {
     const [description, setDescription] = useState('');
     const [difficulty, setDifficulty] = useState<'Easy' | 'Intermediate' | 'Expert'>('Intermediate');
     const [duration, setDuration] = useState('3 Hours');
+    const [editingId, setEditingId] = useState<string | null>(null);
+    const [viewingSubmissionsId, setViewingSubmissionsId] = useState<string | null>(null);
+    const [submissions, setSubmissions] = useState<any[]>([]);
     const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
 
     // Agent Config State
@@ -157,9 +187,35 @@ const Assessments: React.FC = () => {
         }
     };
 
+    const handleScheduleInterview = async (jobTitle: string, assessment: Assessment) => {
+        try {
+            const response = await fetch('http://localhost:8001/api/v1/emails/schedule-interview', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    job_name: jobTitle,
+                    assessment_id: assessment.id,
+                    title: assessment.title
+                })
+            });
+            
+            if (response.ok) {
+                const result = await response.json();
+                setToast({ message: `📅 ${result.message}`, type: 'success' });
+            } else {
+                const errorData = await response.json();
+                setToast({ message: `❌ Scheduling Failed: ${errorData.detail || 'Server Error'}`, type: 'error' });
+            }
+        } catch (err) {
+            console.error('Scheduling failed:', err);
+            setToast({ message: `❌ Connection Error: Backend is offline.`, type: 'error' });
+        }
+    };
+
     const handleCreateTest = (jobId?: number, jobTitle?: string) => {
         setIsModalOpen(true);
         setSelection(null);
+        setEditingId(null);
         setTitle('');
         setDescription('');
         setDifficulty('Intermediate');
@@ -168,36 +224,70 @@ const Assessments: React.FC = () => {
         if (jobTitle) setTargetJobName(jobTitle);
     };
 
+    const handleEditTest = (assessment: Assessment, jobId: number, jobTitle: string) => {
+        setIsModalOpen(true);
+        setSelection('manual');
+        setEditingId(assessment.id);
+        setTitle(assessment.title);
+        setDescription(assessment.description);
+        setDifficulty(assessment.difficulty);
+        setDuration(assessment.duration);
+        setTargetJobId(jobId);
+        setTargetJobName(jobTitle);
+    };
+
+    const handleViewSubmissions = async (assessmentId: string) => {
+        setViewingSubmissionsId(assessmentId);
+        try {
+            const response = await fetch(`http://localhost:8001/api/v1/submissions/assessment/${assessmentId}`);
+            if (response.ok) {
+                const data = await response.json();
+                setSubmissions(data);
+            }
+        } catch (err) {
+            console.error("Failed to fetch submissions:", err);
+        }
+    };
+
     const handleAiGenerate = async () => {
         setIsGenerating(true);
-        setTimeout(async () => {
-            const assessmentPayload = {
-                title: title || 'NEXUS AI Vetting Challenge',
-                duration: duration || '3 Hours',
-                difficulty: difficulty,
-                focus: ['Real-world Scenarios', 'Efficiency', 'Optimization'],
-                description: description || `Automated challenge generated based on job requirements.`,
-                job_id: targetJobId
-            };
-
-            try {
-                const response = await fetch('http://localhost:8001/api/v1/assessments/', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(assessmentPayload)
-                });
-                
-                if (response.ok) {
-                    await fetchData();
-                    setIsGenerating(false);
-                    setIsModalOpen(false);
-                    setToast({ message: "🚀 AI Assessment Generated and Saved!", type: 'success' });
-                }
-            } catch (err) {
-                console.error(err);
+        try {
+            const url = `http://localhost:8001/api/v1/assessments/generate?job_id=${targetJobId}&difficulty=${difficulty}&context=${encodeURIComponent(description)}`;
+            const response = await fetch(url, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' }
+            });
+            
+            if (response.ok) {
+                await fetchData();
                 setIsGenerating(false);
+                setIsModalOpen(false);
+                setToast({ message: "🚀 Dynamic AI Assessment Generated and Saved!", type: 'success' });
+            } else {
+                const err = await response.json();
+                throw new Error(err.detail || "AI Generation failed");
             }
-        }, 3000);
+        } catch (err: any) {
+            console.error(err);
+            setToast({ message: `❌ AI Error: ${err.message}`, type: 'error' });
+            setIsGenerating(false);
+        }
+    };
+
+    const handleDeleteTest = async (id: string) => {
+        if (!window.confirm("Are you sure you want to permanently delete this assessment?")) return;
+        try {
+            const response = await fetch(`http://localhost:8001/api/v1/assessments/${id}`, {
+                method: 'DELETE',
+            });
+            if (response.ok) {
+                await fetchData();
+                setToast({ message: "🗑️ Assessment deleted successfully!", type: 'success' });
+            }
+        } catch (err) {
+            console.error("Delete failed:", err);
+            setToast({ message: "❌ Delete failed: Backend offline.", type: 'error' });
+        }
     };
 
     const handleManualSave = async () => {
@@ -211,8 +301,13 @@ const Assessments: React.FC = () => {
         };
 
         try {
-            const response = await fetch('http://localhost:8001/api/v1/assessments/', {
-                method: 'POST',
+            const url = editingId 
+                ? `http://localhost:8001/api/v1/assessments/${editingId}`
+                : 'http://localhost:8001/api/v1/assessments/';
+            const method = editingId ? 'PUT' : 'POST';
+
+            const response = await fetch(url, {
+                method: method,
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(assessmentPayload)
             });
@@ -220,7 +315,10 @@ const Assessments: React.FC = () => {
             if (response.ok) {
                 await fetchData();
                 setIsModalOpen(false);
-                setToast({ message: "✅ Custom Assessment Saved!", type: 'success' });
+                setToast({ 
+                    message: editingId ? "✅ Assessment Updated!" : "✅ Custom Assessment Saved!", 
+                    type: 'success' 
+                });
             }
         } catch (err) {
             console.error(err);
@@ -269,6 +367,10 @@ const Assessments: React.FC = () => {
                                             key={as.id} 
                                             assessment={as} 
                                             onLaunch={() => handleLaunchAssessment(group.jobTitle, as)}
+                                            onSchedule={() => handleScheduleInterview(group.jobTitle, as)}
+                                            onEdit={() => handleEditTest(as, group.jobId, group.jobTitle)}
+                                            onDelete={() => handleDeleteTest(as.id)}
+                                            onViewSubmissions={() => handleViewSubmissions(as.id)}
                                         />
                                     ))}
                                     <button 
@@ -309,7 +411,9 @@ const Assessments: React.FC = () => {
                     <div className="relative w-full max-w-3xl bg-white rounded-[2.5rem] shadow-2xl overflow-hidden animate-in zoom-in-95 duration-300 p-12">
                         <div className="flex justify-between items-start mb-10">
                             <div>
-                                <h2 className="text-3xl font-extrabold text-slate-800 mb-2">New Assessment <span className="text-primary">Pipeline</span></h2>
+                                <h2 className="text-3xl font-extrabold text-slate-800 mb-2">
+                                    {editingId ? 'Edit' : 'New'} Assessment <span className="text-primary">Pipeline</span>
+                                </h2>
                                 <p className="text-slate-400 font-medium tracking-tight">Vetting for: <span className="text-slate-800 font-bold">{targetJobName}</span></p>
                             </div>
                             <button onClick={() => setIsModalOpen(false)} className="w-10 h-10 rounded-full hover:bg-slate-100 flex items-center justify-center text-slate-400 transition-colors">
@@ -510,6 +614,116 @@ const Assessments: React.FC = () => {
                     </div>
                 </div>
             )}
+            {/* --- View Submissions Modal --- */}
+            {viewingSubmissionsId && (
+                <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 animate-in fade-in duration-300 backdrop-blur-md">
+                    <div className="absolute inset-0 bg-slate-900/40" onClick={() => setViewingSubmissionsId(null)}></div>
+                    <div className="relative w-full max-w-4xl bg-white rounded-[2.5rem] shadow-2xl overflow-hidden animate-in zoom-in-95 duration-300 p-12 max-h-[90vh] flex flex-col">
+                        <div className="flex justify-between items-start mb-10">
+                            <div>
+                                <h2 className="text-3xl font-extrabold text-slate-800 mb-2">Candidate <span className="text-primary">Submissions</span></h2>
+                                <p className="text-slate-400 font-medium">Review candidate responses for this assessment node.</p>
+                            </div>
+                            <button onClick={() => setViewingSubmissionsId(null)} className="w-10 h-10 rounded-full hover:bg-slate-100 flex items-center justify-center text-slate-400 transition-colors">
+                                <span className="material-symbols-outlined text-2xl">close</span>
+                            </button>
+                        </div>
+
+                        <div className="flex-1 overflow-y-auto space-y-6 custom-scrollbar pr-2">
+                            {submissions.length === 0 ? (
+                                <div className="text-center py-20 bg-slate-50 rounded-3xl border border-dashed border-slate-200">
+                                    <span className="material-symbols-outlined text-4xl text-slate-200 mb-2">inbox</span>
+                                    <p className="text-slate-400 font-bold uppercase tracking-widest text-xs">No submissions yet.</p>
+                                </div>
+                            ) : (
+                                submissions.map((sub: any) => (
+                                    <div key={sub.id} className="p-8 bg-slate-50 rounded-3xl border border-slate-100 flex flex-col gap-4 relative group/item">
+                                        <div className="flex justify-between items-center border-b border-slate-200 pb-4">
+                                            <div className="flex items-center gap-3">
+                                                <div className="w-10 h-10 bg-white rounded-xl shadow-sm flex items-center justify-center text-primary">
+                                                    <span className="material-symbols-outlined">person</span>
+                                                </div>
+                                                <div>
+                                                    <p className="text-sm font-bold text-slate-800">{sub.candidate_email}</p>
+                                                    <p className="text-[10px] text-slate-400 font-black uppercase tracking-widest">
+                                                        Submitted: {new Date(sub.submitted_at).toLocaleString()}
+                                                    </p>
+                                                </div>
+                                            </div>
+                                            <div className="flex items-center gap-3">
+                                                {sub.grade ? (
+                                                    <div className="flex items-center gap-2">
+                                                        <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Grade:</span>
+                                                        <div className="px-4 py-1 bg-primary text-white rounded-lg text-sm font-black shadow-lg shadow-primary/20">
+                                                            {sub.grade}
+                                                        </div>
+                                                    </div>
+                                                ) : (
+                                                    <div className="px-3 py-1 bg-slate-200 text-slate-500 rounded-lg text-[10px] font-black uppercase tracking-widest">
+                                                        Pending Evaluation
+                                                    </div>
+                                                )}
+                                            </div>
+                                        </div>
+                                        
+                                        <div className="grid grid-cols-12 gap-6">
+                                            <div className="col-span-12 lg:col-span-12">
+                                                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 block">Candidate Response</label>
+                                                <div className="bg-white p-6 rounded-2xl border border-slate-200 text-sm text-slate-600 font-mono whitespace-pre-wrap leading-relaxed max-h-[200px] overflow-y-auto">
+                                                    {sub.answer}
+                                                </div>
+                                            </div>
+                                            
+                                            {sub.feedback && (
+                                                <div className="col-span-12 bg-primary/5 border border-primary/10 p-6 rounded-2xl">
+                                                    <label className="text-[10px] font-black text-primary uppercase tracking-widest mb-2 block">Evaluation Feedback</label>
+                                                    <p className="text-sm italic text-slate-700 leading-relaxed">"{sub.feedback}"</p>
+                                                </div>
+                                            )}
+                                        </div>
+
+                                        <div className="flex gap-3 pt-4 border-t border-slate-100">
+                                            <button 
+                                                onClick={async () => {
+                                                    const g = prompt("Enter Grade (A-F):", sub.grade || "");
+                                                    const f = prompt("Enter Feedback:", sub.feedback || "");
+                                                    if (g) {
+                                                        const res = await fetch(`http://localhost:8001/api/v1/submissions/${sub.id}/grade?grade=${encodeURIComponent(g)}&feedback=${encodeURIComponent(f || "")}`, { method: 'PUT' });
+                                                        if (res.ok) handleViewSubmissions(viewingSubmissionsId!);
+                                                    }
+                                                }}
+                                                className="flex-1 py-3 bg-white border border-slate-200 text-slate-600 rounded-xl text-[10px] font-black uppercase tracking-widest hover:border-primary hover:text-primary transition-all flex items-center justify-center gap-2"
+                                            >
+                                                <span className="material-symbols-outlined text-sm">edit_note</span>
+                                                Manual Grade
+                                            </button>
+                                            <button 
+                                                onClick={async (e) => {
+                                                    const btn = e.currentTarget;
+                                                    btn.disabled = true;
+                                                    btn.innerHTML = 'AI Evaluating...';
+                                                    try {
+                                                        const res = await fetch(`http://localhost:8001/api/v1/submissions/${sub.id}/ai-grade`, { method: 'POST' });
+                                                        if (res.ok) handleViewSubmissions(viewingSubmissionsId!);
+                                                    } finally {
+                                                        btn.disabled = false;
+                                                        btn.innerHTML = '<span class="material-symbols-outlined text-sm">psychology</span> AI Grade';
+                                                    }
+                                                }}
+                                                className="flex-1 py-3 bg-slate-900 text-white rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-primary transition-all flex items-center justify-center gap-2"
+                                            >
+                                                <span className="material-symbols-outlined text-sm">psychology</span>
+                                                AI Grade
+                                            </button>
+                                        </div>
+                                    </div>
+                                ))
+                            )}
+                        </div>
+                    </div>
+                </div>
+            )}
+
             {/* Toast Notifications */}
             {toast && (
                 <div className={`fixed bottom-8 right-8 z-[200] px-6 py-4 rounded-2xl shadow-2xl flex items-center gap-4 animate-in slide-in-from-right-10 duration-500 ${
