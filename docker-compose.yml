@@ -9,11 +9,11 @@ services:
       POSTGRES_PASSWORD: 120303
       POSTGRES_DB: nexthire
     ports:
-      - "5432:5432"
+      - "5433:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      test: [ "CMD-SHELL", "pg_isready -U postgres" ]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -29,7 +29,7 @@ services:
       - ALGORITHM=HS256
       - USE_OAUTH=false
       - BACKEND_API_URL=http://localhost:8001
-      - GOOGLE_DRIVE_FOLDER_ID=1pyXLZo631ifuqmDW646cPDLDRA2kq-az
+      - GOOGLE_DRIVE_FOLDER_ID=1GP4bhdxIabQOs-dPsxS8f8Cc1rmZ__0a
     depends_on:
       db:
         condition: service_healthy

@@ -8,7 +8,7 @@ from app.api.v1 import (
 
 # Create database tables
 try:
-    from app.models import job, candidate, interview, assessment, submission  # noqa: F401
+    from app.models import job, candidate, interview, assessment, submission, sync_history  # noqa: F401
     Base.metadata.create_all(bind=engine)
     print("Database tables ensured.")
 except Exception as e:

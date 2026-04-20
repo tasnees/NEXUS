@@ -60,3 +60,21 @@
     background-image: url(https://lh3.googleusercontent.com/aida-public/AB6AXuDhReMseGPLQhPCNEXNrfjwvX-OQfDP23nJuDtU_AnTGHMfYa6iEfwgEMIvwFAPC8sO7qoJyuHrPdvGdhOx6v7Of8m2dzKq24fwAlza6ApKcGLdAA3tE9n83tOvUdTaHkyiUm9t-5cdd-xNTbcF5QQCOEpY3AgwMzsII4WGRx7IFV9eiGJimIl5QU9q4zTYFckE2_z_v7PVZqiDdLoVIhwl03yJ9UPX_2J3vms_yJmXk2275UmH7X9jxsLn9nsb0papH1I6wuiDr5LC);
     opacity: 0.03
 }
+
+@keyframes fadeIn {
+    from { opacity: 0; transform: translateY(-10px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+.animate-fade-in {
+    animation: fadeIn 0.4s ease-out forwards;
+}
+
+@keyframes slideUp {
+    from { opacity: 0; transform: translateY(20px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+.animate-slide-up {
+    animation: slideUp 0.5s ease-out forwards;
+}

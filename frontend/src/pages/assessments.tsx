@@ -106,6 +106,14 @@ const Assessments: React.FC = () => {
     const [viewingSubmissionsId, setViewingSubmissionsId] = useState<string | null>(null);
     const [submissions, setSubmissions] = useState<any[]>([]);
     const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
+    
+    // Dispatch Preview Modal State
+    const [previewModalOpen, setPreviewModalOpen] = useState(false);
+    const [matchingCandidates, setMatchingCandidates] = useState<any[]>([]);
+    const [previewMode, setPreviewMode] = useState<'launch' | 'schedule'>('launch');
+    const [activeAssessment, setActiveAssessment] = useState<Assessment | null>(null);
+    const [activeJobTitle, setActiveJobTitle] = useState('');
+    const [isEmailSending, setIsEmailSending] = useState(false);
 
     // Agent Config State
     const [threshold, setThreshold] = useState(80);
@@ -157,58 +165,71 @@ const Assessments: React.FC = () => {
     }, [toast]);
 
     const handleLaunchAssessment = async (jobTitle: string, assessment: Assessment) => {
+        setActiveJobTitle(jobTitle);
+        setActiveAssessment(assessment);
+        setPreviewMode('launch');
+        fetchMatching(jobTitle);
+    };
+
+    const handleScheduleInterview = async (jobTitle: string, assessment: Assessment) => {
+        setActiveJobTitle(jobTitle);
+        setActiveAssessment(assessment);
+        setPreviewMode('schedule');
+        fetchMatching(jobTitle);
+    };
+
+    const fetchMatching = async (jobTitle: string) => {
+        setPreviewModalOpen(true);
+        setMatchingCandidates([]);
         try {
-            const response = await fetch('http://localhost:8001/api/v1/emails/launch-assessment', {
+            const res = await fetch(`http://localhost:8001/api/v1/emails/matching-candidates?job_name=${encodeURIComponent(jobTitle)}`);
+            if (res.ok) {
+                setMatchingCandidates(await res.json());
+            }
+        } catch (err) {
+            console.error("Failed to fetch matches:", err);
+        }
+    };
+
+    const handleFinalDispatch = async () => {
+        if (!activeAssessment || !activeJobTitle) return;
+        setIsEmailSending(true);
+        try {
+            const url = previewMode === 'launch' ? '/launch-assessment' : '/schedule-interview';
+            const payload = previewMode === 'launch' ? {
+                job_name: activeJobTitle,
+                assessment_details: {
+                    assessment_id: activeAssessment.id,
+                    title: activeAssessment.title,
+                    description: activeAssessment.description,
+                    duration: activeAssessment.duration,
+                    difficulty: activeAssessment.difficulty,
+                    focus_areas: activeAssessment.focus
+                }
+            } : {
+                job_name: activeJobTitle,
+                assessment_id: activeAssessment.id,
+                title: activeAssessment.title
+            };
+
+            const response = await fetch(`http://localhost:8001/api/v1/emails${url}`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    job_name: jobTitle,
-                    assessment_details: {
-                        assessment_id: assessment.id,
-                        title: assessment.title,
-                        description: assessment.description,
-                        duration: assessment.duration,
-                        difficulty: assessment.difficulty,
-                        focus_areas: assessment.focus
-                    }
-                })
+                body: JSON.stringify(payload)
             });
             
             if (response.ok) {
                 const result = await response.json();
                 setToast({ message: `🚀 Success: ${result.message}`, type: 'success' });
+                setPreviewModalOpen(false);
             } else {
                 const errorData = await response.json();
-                setToast({ message: `❌ Launch Failed: ${errorData.detail || 'Server Error'}`, type: 'error' });
+                setToast({ message: `❌ Failed: ${errorData.detail || 'Server Error'}`, type: 'error' });
             }
         } catch (err) {
-            console.error('Email launch failed:', err);
             setToast({ message: `❌ Connection Error: Backend server is offline.`, type: 'error' });
-        }
-    };
-
-    const handleScheduleInterview = async (jobTitle: string, assessment: Assessment) => {
-        try {
-            const response = await fetch('http://localhost:8001/api/v1/emails/schedule-interview', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    job_name: jobTitle,
-                    assessment_id: assessment.id,
-                    title: assessment.title
-                })
-            });
-            
-            if (response.ok) {
-                const result = await response.json();
-                setToast({ message: `📅 ${result.message}`, type: 'success' });
-            } else {
-                const errorData = await response.json();
-                setToast({ message: `❌ Scheduling Failed: ${errorData.detail || 'Server Error'}`, type: 'error' });
-            }
-        } catch (err) {
-            console.error('Scheduling failed:', err);
-            setToast({ message: `❌ Connection Error: Backend is offline.`, type: 'error' });
+        } finally {
+            setIsEmailSending(false);
         }
     };
 
@@ -719,6 +740,98 @@ const Assessments: React.FC = () => {
                                     </div>
                                 ))
                             )}
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* --- Dispatch Preview Modal --- */}
+            {previewModalOpen && (
+                <div className="fixed inset-0 z-[110] flex items-center justify-center p-4 animate-in fade-in duration-300 backdrop-blur-md">
+                    <div className="absolute inset-0 bg-slate-900/40" onClick={() => setPreviewModalOpen(false)}></div>
+                    <div className="relative w-full max-w-2xl bg-white rounded-[2.5rem] shadow-2xl overflow-hidden animate-in zoom-in-95 duration-300 p-10 flex flex-col max-h-[85vh]">
+                        <div className="flex justify-between items-start mb-6">
+                            <div>
+                                <h2 className="text-2xl font-extrabold text-slate-800">
+                                    {previewMode === 'launch' ? 'Launch Evaluation' : 'Schedule Interviews'}
+                                </h2>
+                                <p className="text-sm text-slate-400 font-medium">Preparing dispatch for: <span className="text-slate-800 font-bold">{activeJobTitle}</span></p>
+                            </div>
+                            <button onClick={() => setPreviewModalOpen(false)} className="w-8 h-8 rounded-full hover:bg-slate-100 flex items-center justify-center text-slate-400 transition-colors">
+                                <span className="material-symbols-outlined text-xl">close</span>
+                            </button>
+                        </div>
+
+                        <div className="mb-6 p-4 bg-slate-50 rounded-2xl border border-slate-100">
+                            <div className="flex items-center gap-3">
+                                <span className="material-symbols-outlined text-primary">analytics</span>
+                                <p className="text-xs font-bold text-slate-700">Matched {matchingCandidates.length} Active Candidates</p>
+                            </div>
+                        </div>
+
+                        <div className="flex-1 overflow-y-auto space-y-3 pr-2 custom-scrollbar mb-6">
+                            {matchingCandidates.length === 0 ? (
+                                <div className="text-center py-10">
+                                    <p className="text-slate-400 text-sm font-bold animate-pulse">Scanning database for candidates...</p>
+                                </div>
+                            ) : (
+                                matchingCandidates.map(c => (
+                                    <div key={c.id} className="p-4 bg-white border border-slate-100 rounded-xl flex items-center justify-between group hover:border-primary/30 transition-all shadow-sm">
+                                        <div className="flex items-center gap-3">
+                                            <div className="w-8 h-8 bg-slate-100 rounded-lg flex items-center justify-center text-slate-400 group-hover:bg-primary group-hover:text-white transition-all">
+                                                <span className="material-symbols-outlined text-sm">person</span>
+                                            </div>
+                                            <div>
+                                                <p className="text-sm font-bold text-slate-800 leading-none">{c.name}</p>
+                                                <p className="text-[10px] text-slate-400 font-bold">{c.email}</p>
+                                            </div>
+                                        </div>
+                                        <div className="flex gap-2">
+                                            <button 
+                                                title="Copy Direct Link"
+                                                onClick={() => {
+                                                    const baseLink = previewMode === 'launch' 
+                                                        ? `http://localhost:5173/portal/assessment-portal?assessment_id=${activeAssessment?.id}&email=${c.email}`
+                                                        : `https://calendar.google.com/calendar/selfsched?sstoken=https://calendar.app.google/n2JRv629z27Yb2Vq5`;
+                                                    navigator.clipboard.writeText(baseLink);
+                                                    setToast({ message: "📋 Link copied! You can now send it manually.", type: 'success' });
+                                                }}
+                                                className="w-8 h-8 rounded-lg bg-slate-50 text-slate-400 flex items-center justify-center hover:bg-primary/10 hover:text-primary transition-all border border-slate-100"
+                                            >
+                                                <span className="material-symbols-outlined text-sm">content_copy</span>
+                                            </button>
+                                            <div className="w-4 h-4 bg-emerald-500 rounded-full flex items-center justify-center text-white scale-0 group-hover:scale-100 transition-all duration-300">
+                                                <span className="material-symbols-outlined text-[10px] font-black">done</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                ))
+                            )}
+                        </div>
+
+                        <div className="space-y-4">
+                            <div className="p-4 bg-amber-50 rounded-2xl border border-amber-100 flex items-start gap-4">
+                                <span className="material-symbols-outlined text-amber-500 text-sm mt-0.5">info</span>
+                                <p className="text-[10px] text-amber-700 font-medium leading-relaxed">
+                                    <b>Manual Fallback Enabled:</b> Use the 📋 icon to copy individual links if your SMTP service is experiencing issues (e.g. Gmail App Password required).
+                                </p>
+                            </div>
+                            
+                            <div className="flex gap-4">
+                                <button onClick={() => setPreviewModalOpen(false)} className="flex-1 py-4 bg-slate-100 text-slate-600 rounded-2xl font-bold text-sm">Cancel</button>
+                                <button 
+                                    disabled={matchingCandidates.length === 0 || isEmailSending}
+                                    onClick={handleFinalDispatch}
+                                    className="flex-[2] py-4 bg-slate-900 text-white rounded-2xl font-bold text-sm shadow-xl shadow-slate-200 flex items-center justify-center gap-2 hover:bg-primary transition-all disabled:opacity-50"
+                                >
+                                    {isEmailSending ? 'Dispatching...' : (
+                                        <>
+                                            <span className="material-symbols-outlined text-sm">send</span>
+                                            Dispatch to {matchingCandidates.length} Candidates
+                                        </>
+                                    )}
+                                </button>
+                            </div>
                         </div>
                     </div>
                 </div>

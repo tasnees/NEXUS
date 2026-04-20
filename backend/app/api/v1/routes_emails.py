@@ -77,8 +77,10 @@ def send_email_task(to_email: str, job_name: str, assessment: AssessmentDetails)
         server.send_message(msg)
         server.quit()
         print(f"Email successfully sent to {to_email}")
+    except smtplib.SMTPAuthenticationError:
+        print(f"❌ SMTP AUTH ERROR: Username or Password rejected for {SENDER_EMAIL}. If using Gmail, please ensure you are using an 'App Password' (16 characters) and not your regular account password.")
     except Exception as e:
-        print(f"Failed to send email to {to_email}: {e}")
+        print(f"❌ Failed to send email to {to_email}: {e}")
 
 class ScheduleRequest(BaseModel):
     job_name: str
@@ -110,8 +112,10 @@ def send_schedule_email_task(to_email: str, job_name: str, assessment_title: str
         server.send_message(msg)
         server.quit()
         print(f"Scheduling email sent to {to_email}")
+    except smtplib.SMTPAuthenticationError:
+        print(f"❌ SMTP AUTH ERROR: Scheduling email failed for {SENDER_EMAIL}. App Password required.")
     except Exception as e:
-        print(f"Failed to send scheduling email to {to_email}: {e}")
+        print(f"❌ Failed to send scheduling email to {to_email}: {e}")
 
 from sqlalchemy import func
 
@@ -122,52 +126,39 @@ async def launch_assessment_emails(
     db: Session = Depends(get_db)
 ):
     """Finds candidates for the job and sends them an evaluation email."""
-    emails = payload.candidate_emails
-    if not emails:
-        job_query = payload.job_name.lower().strip()
-        # "Ultra-Leniency" normalization: get root stems
-        # e.g. "design", "designer", "designing" -> all share "design"
-        def get_stems(text):
-            words = re.findall(r'\w+', text.lower())
-            return {w[:5] for w in words if len(w) > 2} # Match first 5 chars
-            
-        job_stems = get_stems(job_query)
-        
-        # Advanced Matching Engine
-        all_candidates = db.query(Candidate).all()
-        matching_candidates = []
-        
-        print(f"--- LAUNCH: Matching for job '{job_query}' ---")
-        
-        for c in all_candidates:
-            if not c.applied_job:
-                continue
+    
+    # ── Ultra-Leniency Engine ──
+    def get_stems(text):
+        if not text: return set()
+        words = re.findall(r'\w+', text.lower())
+        return {w[:5] for w in words if len(w) > 2}
 
+    def robust_match_candidates(job_name: str):
+        query = job_name.lower().strip()
+        job_stems = get_stems(query)
+        all_cands = db.query(Candidate).all()
+        matches = []
+        for c in all_cands:
+            if not c.applied_job: continue
             cand_job = c.applied_job.lower().strip()
             # 1. Stem Check
-            cand_stems = get_stems(cand_job)
-            stem_match = bool(job_stems.intersection(cand_stems))
-            
-            # 2. String Match (substring/contains)
-            string_match = (job_query in cand_job or cand_job in job_query)
-            
-            # 3. Fuzzy Stem Check
-            fuzzy_match = any(s in cand_job for s in job_stems)
+            if job_stems.intersection(get_stems(cand_job)):
+                matches.append(c)
+            # 2. Substring Match
+            elif query in cand_job or cand_job in query:
+                matches.append(c)
+        return matches
 
-            if stem_match or string_match or fuzzy_match:
-                print(f"  ✅ MATCH FOUND: {c.name} ({cand_job})")
-                matching_candidates.append(c)
-            else:
-                print(f"  ❌ NO MATCH: {c.name} ({cand_job})")
-
+    emails = payload.candidate_emails
+    if not emails:
+        matching_candidates = robust_match_candidates(payload.job_name)
         emails = [c.email for c in matching_candidates if c.email]
-        print(f"Final email list: {emails}")
 
     if not emails:
+        all_count = db.query(Candidate).count()
         return {
             "status": "error", 
-            "message": f"Launch Failed: No candidates found for '{payload.job_name}'. Total checked: {len(all_candidates)}.",
-            "job_stems": list(job_stems)
+            "message": f"Launch Failed: No candidates found for '{payload.job_name}'. Checked {all_count} records."
         }
 
     # Dispatch Emails
@@ -176,23 +167,73 @@ async def launch_assessment_emails(
 
     return {"status": "success", "message": f"Successfully queued {len(emails)} assessment invitation(s)."}
 
+@router.get("/matching-candidates")
+async def get_matching_candidates(job_name: str, db: Session = Depends(get_db)):
+    """Returns a list of candidates that match a job name to preview dispatch."""
+    
+    def get_stems(text):
+        if not text: return set()
+        words = re.findall(r'\w+', text.lower())
+        return {w[:5] for w in words if len(w) > 2}
+
+    def robust_match_candidates(job_name: str):
+        query = job_name.lower().strip()
+        job_stems = get_stems(query)
+        all_cands = db.query(Candidate).all()
+        matches = []
+        for c in all_cands:
+            if not c.applied_job: continue
+            cand_job = c.applied_job.lower().strip()
+            # 1. Stem Check
+            if job_stems.intersection(get_stems(cand_job)):
+                matches.append(c)
+            # 2. Substring Match
+            elif query in cand_job or cand_job in job_query:
+                matches.append(c)
+        return matches
+
+    job_query = job_name # For the closure
+    matches = robust_match_candidates(job_name)
+    return [{
+        "id": c.id,
+        "name": c.name,
+        "email": c.email,
+        "job": c.applied_job
+    } for c in matches]
+
 @router.post("/schedule-interview")
 async def schedule_interview_emails(
     payload: ScheduleRequest,
     background_tasks: BackgroundTasks,
     db: Session = Depends(get_db)
 ):
-    """Sends scheduling links to candidates who passed the assessment phase."""
+    """Sends scheduling links to candidates using the same robust matching engine."""
+    
+    def get_stems(text):
+        if not text: return set()
+        words = re.findall(r'\w+', text.lower())
+        return {w[:5] for w in words if len(w) > 2}
+
+    def robust_match_candidates(job_name: str):
+        query = job_name.lower().strip()
+        job_stems = get_stems(query)
+        all_cands = db.query(Candidate).all()
+        matches = []
+        for c in all_cands:
+            if not c.applied_job: continue
+            cand_job = c.applied_job.lower().strip()
+            if job_stems.intersection(get_stems(cand_job)) or query in cand_job or (job_query in cand_job or cand_job in job_query):
+                matches.append(c)
+        return matches
+
+    job_query = payload.job_name
     emails = payload.candidate_emails
     if not emails:
-        job_query = payload.job_name.lower().strip()
-        candidates = db.query(Candidate).filter(
-            func.lower(Candidate.applied_job).contains(job_query)
-        ).all()
-        emails = [c.email for c in candidates if c.email]
+        matching_candidates = robust_match_candidates(payload.job_name)
+        emails = [c.email for c in matching_candidates if c.email]
 
     if not emails:
-        raise HTTPException(status_code=404, detail=f"No active candidates found for job matching '{payload.job_name}'.")
+        raise HTTPException(status_code=404, detail=f"No active candidates found for job '{payload.job_name}'.")
 
     for email in emails:
         background_tasks.add_task(send_schedule_email_task, email, payload.job_name, payload.title)

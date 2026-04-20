@@ -64,7 +64,7 @@ log = logging.getLogger("DriveSync")
 from dotenv import load_dotenv
 load_dotenv(BACKEND_DIR / ".env")
 
-FOLDER_ID               = os.getenv("GOOGLE_DRIVE_FOLDER_ID", "")
+FOLDER_ID               = os.getenv("GOOGLE_DRIVE_FOLDER_ID") or os.getenv("DRIVE_FOLDER_ID", "")
 BACKEND_API_URL         = os.getenv("BACKEND_API_URL", "http://localhost:8001")
 CANDIDATES_ENDPOINT     = f"{BACKEND_API_URL}/api/v1/candidates/"
 USE_OAUTH               = os.getenv("USE_OAUTH", "false").lower() == "true"
@@ -354,19 +354,41 @@ def run_sync():
             profile = extract_resume_fields(raw_text, existing_job_titles=existing_titles)
 
             # --- DYNAMIC JOB LABELING ---
-            # Priority: 1. Manual Folder Name, 2. AI Extraction, 3. Dynamic Keywords, 4. Uncategorized
+            # Priority: 1. Manual Folder Name, 2. AI Extraction, 3. Filename Keywords, 4. CV Text Keywords, 5. Uncategorized
             applied_job = job_hint or profile.applied_job
             
-            if not applied_job or applied_job == "Uncategorized":
+            # Treat "Not provided" or empty results as uncategorized for internal processing
+            if not applied_job or applied_job.lower() in ["not provided", "uncategorized", "n/a", "none"]:
                 lower_file = filename.lower()
+                lower_text = raw_text.lower()
+                
+                matched = False
                 for job_title in existing_titles:
-                    # Get core keywords from DB job titles
+                    # Get core keywords from DB job titles, ignoring common short words
                     keywords = [k.lower().strip() for k in job_title.split() if len(k) > 3]
+                    if not keywords: continue
+                    
+                    # Check filename first (stronger signal)
                     if any(k in lower_file for k in keywords):
                         applied_job = job_title
+                        matched = True
+                        break
+                    
+                    # Check raw text (weaker but good fallback)
+                    if any(k in lower_text for k in keywords):
+                        applied_job = job_title
+                        matched = True
                         break
                 
-                applied_job = applied_job or "Uncategorized"
+                if not matched:
+                    applied_job = "Uncategorized"
+
+            # Clean up the final label: ensure it's one of the official job titles if close
+            if applied_job != "Uncategorized":
+                for job_title in existing_titles:
+                    if applied_job.lower() == job_title.lower():
+                        applied_job = job_title # Use official casing
+                        break
 
             # Build DB payload
             payload = {
@@ -404,6 +426,7 @@ def run_sync():
 
     log.info("─" * 60)
     log.info("  Pass complete: %d synced | %d skipped | %d failed", processed, skipped, failed)
+    return processed, skipped, failed
 
 
 # ── entry-point ────────────────────────────────────────────────────────────────

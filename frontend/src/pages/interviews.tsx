@@ -292,13 +292,39 @@ const Interviews: React.FC = () => {
                                         const btn = document.activeElement as HTMLButtonElement;
                                         const original = btn.innerHTML;
                                         btn.disabled = true;
-                                        btn.innerHTML = '<span class="material-symbols-outlined animate-spin">sync</span> Syncing...';
-                                        await fetchData(); // Refresh local data
-                                        setTimeout(() => {
+                                        btn.innerHTML = '<span class="material-symbols-outlined animate-spin text-sm">sync</span> Syncing...';
+                                        
+                                        try {
+                                            const res = await fetch('http://localhost:8001/api/v1/sync/calendar', { method: 'POST' });
+                                            if (res.ok) {
+                                                // Poll for completion
+                                                const checkStatus = setInterval(async () => {
+                                                    const statRes = await fetch('http://localhost:8001/api/v1/sync/calendar/status');
+                                                    if (statRes.ok) {
+                                                        const status = await statRes.json();
+                                                        if (!status.running) {
+                                                            clearInterval(checkStatus);
+                                                            await fetchData(); // Refresh local list
+                                                            btn.disabled = false;
+                                                            btn.innerHTML = original;
+                                                            if (status.error) {
+                                                                alert(`⚠️ Calendar Sync Error: ${status.error}\n\nTip: Ensure your calendar is shared with the service account email.`);
+                                                            } else {
+                                                                alert(`✅ Google Calendar synced! Successfully imported ${status.new_events} new appointments.`);
+                                                            }
+                                                        }
+                                                    }
+                                                }, 2000);
+                                            } else {
+                                                btn.disabled = false;
+                                                btn.innerHTML = original;
+                                                alert("❌ Sync already in progress.");
+                                            }
+                                        } catch (err) {
                                             btn.disabled = false;
                                             btn.innerHTML = original;
-                                            alert("✅ Google Calendar synced successfully! New appointments have been imported.");
-                                        }, 1500);
+                                            alert("❌ Connection to backend failed.");
+                                        }
                                     }}
                                     className="w-full bg-primary text-white py-4 rounded-2xl font-black text-xs uppercase tracking-widest flex items-center justify-center gap-3 relative z-10 shadow-xl shadow-primary/20 hover:scale-[1.02] transition-all disabled:opacity-50"
                                 >

@@ -77,3 +77,30 @@ def get_jobs(db: Session = Depends(get_db)):
             job.match_rate = 0
             
     return jobs
+
+
+class JobDetail(JobResponse):
+    """Extended response that includes requirements and description for heuristic analysis."""
+    company: str | None = None
+    salary: str | None = None
+    requirements: str | None = None
+    description: str | None = None
+
+    class Config:
+        from_attributes = True
+
+
+@router.get("/by-title/{title}", response_model=JobDetail)
+def get_job_by_title(title: str, db: Session = Depends(get_db)):
+    """
+    Fetch a single job by its title (case-insensitive).
+    Used by the candidate profile to derive dynamic heuristic categories.
+    """
+    from sqlalchemy import func as sql_func
+    job = db.query(Job).filter(
+        sql_func.lower(Job.title) == title.lower()
+    ).first()
+    if not job:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=404, detail="Job not found")
+    return job

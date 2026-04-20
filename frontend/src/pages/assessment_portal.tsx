@@ -53,7 +53,13 @@ const AssessmentPortal: React.FC = () => {
                     answer: submissionText
                 })
             });
-            alert("🚀 Assessment submitted successfully!");
+            
+            if (isAutoSubmitting) {
+                alert("⏰ Time is up! Your assessment has been automatically submitted.");
+            } else {
+                alert("🚀 Assessment submitted successfully!");
+            }
+            
             navigate('/dashboard');
         } catch (err) {
             console.error("Submission failed:", err);

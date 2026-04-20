@@ -63,28 +63,26 @@ def extract_resume_fields(resume_text: str, existing_job_titles: Optional[List[s
             if not ai_instance:
                 raise AttributeError("Could not initialize Puter AI Brain.")
 
-            prompt = f"""You are a world-class talent acquisition agent. Parse the resume content below into a strict JSON object.
-CONTEXT:
-{job_context}
-
-STRICT JSON FIELDS:
-1. "name": Full name (string)
-2. "email": Email (string)
-3. "phone": Best phone number (string)
-4. "skills": List of technical and soft skills (array of strings)
-5. "experience": Work history (array of strings)
-6. "education": Education history (array of strings)
-7. "summary": Executive summary (string)
-8. "applied_job": Match EXACTLY one from the 'Available Jobs' context above. (string)
-9. "seniority": [Junior, Mid, Senior, Lead] (string) 
-10. "years_of_experience": Total professional years (integer)
-11. "links": Professional URLs found. (array of strings)
-
-RESUME RAW TEXT:
-\"\"\"
-{resume_text}
-\"\"\"
-Return ONLY JSON."""
+            prompt = (
+                "You are a world-class talent acquisition agent. "
+                "Parse the resume content below into a strict JSON object.\n\n"
+                f"CONTEXT:\n{job_context}\n\n"
+                "STRICT JSON FIELDS:\n"
+                '1. "name": Full name (string)\n'
+                '2. "email": Email (string)\n'
+                '3. "phone": Best phone number (string)\n'
+                '4. "skills": List of technical and soft skills (array of strings)\n'
+                '5. "experience": Work history entries (array of strings)\n'
+                '6. "education": Education history (array of strings)\n'
+                '7. "summary": Executive summary (string)\n'
+                '8. "applied_job": Match against one of the Available Jobs below. '
+                'Use "Uncategorized" if there is no clear match. (string)\n'
+                '9. "seniority": One of [Junior, Mid, Senior, Lead] (string)\n'
+                '10. "years_of_experience": Total professional years (integer)\n'
+                '11. "links": Professional URLs found (array of strings)\n\n'
+                f"RESUME RAW TEXT:\n---\n{resume_text}\n---\n\n"
+                "Return ONLY a valid JSON object. No explanation, no markdown fences."
+            )
 
             response = None
             # Find the correct method on the brain

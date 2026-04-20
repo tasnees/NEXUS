@@ -27,6 +27,15 @@ interface FilterState {
     activeRoleFilter: string | null;
 }
 
+interface SyncStatus {
+    running: boolean;
+    last_run: string | null;
+    processed: number;
+    skipped: number;
+    failed: number;
+    error: string | null;
+}
+
 // --- Constants ---
 
 
@@ -203,6 +212,19 @@ const ActionMenu: React.FC<{
                     >
                         <span className="material-symbols-outlined text-base text-primary">edit</span>
                         Update Candidate
+                    </button>
+                    <button
+                        className="w-full flex items-center gap-2.5 px-4 py-3 text-sm font-semibold text-slate-700 hover:bg-primary/5 hover:text-primary transition-colors"
+                        onClick={(e) => { 
+                            e.stopPropagation(); 
+                            setOpen(false); 
+                            const link = `http://localhost:5173/portal/assessment-portal?assessment_id=1&email=${encodeURIComponent(candidate.email || 'candidate@nexthire.ai')}`;
+                            navigator.clipboard.writeText(link);
+                            alert("📋 Assessment link copied to clipboard!"); 
+                        }}
+                    >
+                        <span className="material-symbols-outlined text-base text-primary">content_copy</span>
+                        Copy Invite Link
                     </button>
                     <div className="border-t border-accent/10" />
                     <button
@@ -384,35 +406,87 @@ const Candidates: React.FC = () => {
     });
     const [updateTarget, setUpdateTarget] = useState<Candidate | null>(null);
     const [deleteTarget, setDeleteTarget] = useState<Candidate | null>(null);
+    const [syncStatus, setSyncStatus] = useState<SyncStatus | null>(null);
+    const [syncHistory, setSyncHistory] = useState<any[]>([]);
+    const [isSyncing, setIsSyncing] = useState(false);
+
+    const fetchCandidates = async () => {
+        try {
+            const response = await fetch('http://localhost:8001/api/v1/candidates/');
+            if (!response.ok) throw new Error('Failed to fetch');
+            const data = await response.json();
+            
+            // Map DB schema to UI schema
+            const mapped: Candidate[] = data.map((c: any) => ({
+                id: c.id,
+                name: c.name || "Anonymous",
+                email: c.email || "",
+                role: c.skills?.[0] || "Applicant",
+                avatar: `https://ui-avatars.com/api/?name=${encodeURIComponent(c.name || 'A')}&background=random`,
+                aiScore: 70 + (c.skills?.length || 0) * 2,
+                quizScore: 75,
+                sentiment: 'positive' as const,
+                status: 'new' as const,
+                applied_job: c.applied_job,
+            }));
+            
+            setCandidates(mapped);
+        } catch (err) {
+            console.error("Fetch error:", err);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const fetchSyncHistory = async () => {
+        try {
+            const res = await fetch('http://localhost:8001/api/v1/sync/history');
+            if (res.ok) setSyncHistory(await res.json());
+        } catch {}
+    };
 
     useEffect(() => {
-        const fetchCandidates = async () => {
-            try {
-                const response = await fetch('http://localhost:8001/api/v1/candidates/');
-                if (!response.ok) throw new Error('Failed to fetch');
-                const data = await response.json();
-                
-                // Map DB schema to UI schema
-                const mapped: Candidate[] = data.map((c: any) => ({
-                    id: c.id,
-                    name: c.name || "Anonymous",
-                    role: c.skills?.[0] || "Applicant",
-                    avatar: `https://ui-avatars.com/api/?name=${encodeURIComponent(c.name || 'A')}&background=random`,
-                    aiScore: 70 + (c.skills?.length || 0) * 2,
-                    quizScore: 75,
-                    sentiment: 'positive' as const,
-                    status: 'new' as const,
-                    applied_job: c.applied_job,
-                }));
-                
-                setCandidates(mapped);
-            } catch (err) {
-                console.error("Fetch error:", err);
-            } finally {
-                setLoading(false);
-            }
-        };
         fetchCandidates();
+        fetchSyncHistory();
+    }, []);
+
+    // Poll sync status
+    useEffect(() => {
+        let interval: any;
+        if (isSyncing) {
+            interval = setInterval(async () => {
+                try {
+                    const res = await fetch('http://localhost:8001/api/v1/sync/status');
+                    if (res.ok) {
+                        const status: SyncStatus = await res.json();
+                        setSyncStatus(status);
+                        if (!status.running) {
+                            setIsSyncing(false);
+                            fetchCandidates(); // Refresh list when done
+                            fetchSyncHistory(); // Refresh history
+                        }
+                    }
+                } catch (err) {
+                    console.error("Sync status poll error:", err);
+                }
+            }, 2000);
+        }
+        return () => clearInterval(interval);
+    }, [isSyncing]);
+
+    // Initial sync status check
+    useEffect(() => {
+        const checkInitialStatus = async () => {
+            try {
+                const res = await fetch('http://localhost:8001/api/v1/sync/status');
+                if (res.ok) {
+                    const status = await res.json();
+                    setSyncStatus(status);
+                    if (status.running) setIsSyncing(true);
+                }
+            } catch {}
+        };
+        checkInitialStatus();
     }, []);
 
     const handleCandidateUpdated = (updated: Candidate) => {
@@ -486,29 +560,26 @@ const Candidates: React.FC = () => {
                         <button 
                             onClick={async (e) => {
                                 e.stopPropagation();
-                                const btn = e.currentTarget;
-                                btn.disabled = true;
-                                const originalText = btn.innerHTML;
-                                btn.innerHTML = '<span class="material-symbols-outlined text-lg animate-spin">sync</span> Syncing...';
+                                setIsSyncing(true);
                                 try {
                                     const res = await fetch('http://localhost:8001/api/v1/sync/', { method: 'POST' });
-                                    if (res.ok) {
-                                        alert("🚀 Sync started in background! Candidates will appear shortly.");
-                                    } else {
+                                    if (!res.ok) {
                                         const err = await res.json();
-                                        alert("❌ Sync failed: " + (err.detail || "Unknown error"));
+                                        alert("❌ Sync failed to start: " + (err.detail || "Unknown error"));
+                                        setIsSyncing(false);
                                     }
                                 } catch (err) {
                                     alert("❌ Connection error: " + err);
-                                } finally {
-                                    btn.disabled = false;
-                                    btn.innerHTML = originalText;
+                                    setIsSyncing(false);
                                 }
                             }}
+                            disabled={isSyncing}
                             className="bg-accent hover:bg-accent/90 text-white flex items-center gap-2 px-5 py-2 rounded-lg text-sm font-bold transition-all shadow-sm active:scale-95 disabled:opacity-50"
                         >
-                            <span className="material-symbols-outlined text-lg">cloud_sync</span>
-                            Sync CVs from Drive
+                            <span className={`material-symbols-outlined text-lg ${isSyncing ? 'animate-spin' : ''}`}>
+                                {isSyncing ? 'sync' : 'cloud_sync'}
+                            </span>
+                            {isSyncing ? 'Syncing Drive...' : 'Sync CVs from Drive'}
                         </button>
                         <button className="bg-primary hover:bg-primary/90 text-white flex items-center gap-2 px-5 py-2 rounded-lg text-sm font-bold transition-all shadow-sm active:scale-95">
                             <span className="material-symbols-outlined text-lg">compare_arrows</span>
@@ -551,6 +622,58 @@ const Candidates: React.FC = () => {
                     </button>
                 </div>
 
+                {/* Sync Status Toast/Notice */}
+                {syncStatus && (syncStatus.running || (syncStatus.last_run && (syncStatus.processed > 0 || syncStatus.failed > 0 || syncStatus.error))) && (
+                    <div className="mx-8 mt-6 p-4 bg-white rounded-xl border border-accent/10 shadow-sm flex items-center justify-between animate-fade-in">
+                        <div className="flex items-center gap-4">
+                            <div className={`w-10 h-10 rounded-full flex items-center justify-center ${syncStatus.running ? 'bg-blue-50' : syncStatus.error ? 'bg-red-50' : 'bg-green-50'}`}>
+                                <span className={`material-symbols-outlined ${syncStatus.running ? 'text-blue-600 animate-spin' : syncStatus.error ? 'text-red-600' : 'text-green-600'}`}>
+                                    {syncStatus.running ? 'sync' : syncStatus.error ? 'error' : 'check_circle'}
+                                </span>
+                            </div>
+                            <div>
+                                <h4 className="text-sm font-bold text-slate-800">
+                                    {syncStatus.running ? 'Syncing Candidates...' : syncStatus.error ? 'Sync Failed' : 'Sync Completed'}
+                                </h4>
+                                <p className="text-xs text-accent">
+                                    {syncStatus.running 
+                                        ? `Currently processing Google Drive... (${syncStatus.processed} found so far)`
+                                        : syncStatus.error 
+                                            ? `Error: ${syncStatus.error}`
+                                            : `Last run: ${new Date(syncStatus.last_run!).toLocaleString()} • ${syncStatus.processed} new, ${syncStatus.skipped} skipped, ${syncStatus.failed} failed`
+                                    }
+                                </p>
+                            </div>
+                        </div>
+                        {!syncStatus.running && (
+                            <button 
+                                onClick={() => setSyncStatus(null)}
+                                className="text-accent hover:text-slate-800"
+                            >
+                                <span className="material-symbols-outlined text-sm">close</span>
+                            </button>
+                        )}
+                    </div>
+                )}
+
+                {/* History Drawer-like section (Static for now) */}
+                {!syncStatus?.running && syncHistory.length > 0 && (
+                    <div className="mx-8 mt-4 flex items-center gap-6 overflow-x-auto pb-2 custom-scrollbar">
+                        <span className="text-[10px] font-black text-accent uppercase tracking-widest whitespace-nowrap">Recent Syncs:</span>
+                        {syncHistory.map((h) => (
+                            <div key={h.id} className="flex items-center gap-2 bg-white/50 px-3 py-1.5 rounded-full border border-accent/5 whitespace-nowrap">
+                                <span className={`w-1.5 h-1.5 rounded-full ${h.status === 'success' ? 'bg-green-500' : 'bg-red-500'}`} />
+                                <span className="text-[10px] font-bold text-slate-700">
+                                    {h.status === 'success' ? `+${h.processed} synced` : 'Failed'}
+                                </span>
+                                <span className="text-[10px] text-accent/60">
+                                    {new Date(h.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                </span>
+                            </div>
+                        ))}
+                    </div>
+                )}
+
                 {/* Content Area */}
                 <div className="flex-1 overflow-auto p-8 custom-scrollbar">
                     <div className="bg-white rounded-xl shadow-soft border border-white overflow-hidden">
@@ -587,27 +710,40 @@ const Candidates: React.FC = () => {
                                 ) : (
                                     (() => {
                                         const grouped = filteredCandidates.reduce((acc, c) => {
-                                            const job = c.applied_job || 'Uncategorized';
+                                            let job = c.applied_job || 'Uncategorized';
+                                            
+                                            // Normalize "missing" or "not provided" strings
+                                            const normalized = job.toLowerCase().trim();
+                                            if (!normalized || normalized === 'not provided' || normalized === 'n/a' || normalized === 'none') {
+                                                job = 'Uncategorized';
+                                            }
+                                            
                                             if (!acc[job]) acc[job] = [];
                                             acc[job].push(c);
                                             return acc;
                                         }, {} as Record<string, Candidate[]>);
 
-                                        return Object.entries(grouped).map(([job, jobCandidates]) => (
-                                            <React.Fragment key={job}>
-                                                <tr className="bg-[#f8f9fa] border-l-4 border-primary">
-                                                    <td colSpan={6} className="px-6 py-3">
-                                                        <div className="flex items-center gap-2">
-                                                            <span className="material-symbols-outlined text-primary text-sm">work</span>
-                                                            <span className="text-xs font-black text-slate-700 uppercase tracking-widest">
-                                                                {job}
-                                                            </span>
-                                                            <span className="bg-primary/10 text-primary text-[10px] font-bold px-1.5 py-0.5 rounded-full">
-                                                                {jobCandidates.length}
-                                                            </span>
-                                                        </div>
-                                                    </td>
-                                                </tr>
+                                        return Object.entries(grouped)
+                                            .sort(([a], [b]) => {
+                                                if (a === 'Uncategorized') return 1;
+                                                if (b === 'Uncategorized') return -1;
+                                                return a.localeCompare(b);
+                                            })
+                                            .map(([job, jobCandidates]) => (
+                                                <React.Fragment key={job}>
+                                                    <tr className="bg-[#f8f9fa] border-l-4 border-primary">
+                                                        <td colSpan={6} className="px-6 py-3">
+                                                            <div className="flex items-center gap-2">
+                                                                <span className="material-symbols-outlined text-primary text-sm">work</span>
+                                                                <span className="text-xs font-black text-slate-700 uppercase tracking-widest">
+                                                                    {job === 'Uncategorized' ? 'Needs Review / Uncategorized' : job}
+                                                                </span>
+                                                                <span className="bg-primary/10 text-primary text-[10px] font-bold px-1.5 py-0.5 rounded-full">
+                                                                    {jobCandidates.length}
+                                                                </span>
+                                                            </div>
+                                                        </td>
+                                                    </tr>
                                                 {jobCandidates.map((candidate) => (
                                                     <tr
                                                         key={candidate.id}

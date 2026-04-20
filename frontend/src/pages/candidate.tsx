@@ -14,12 +14,21 @@ interface CandidateData {
     experience: string[];
     education: string[];
     raw_text: string;
+    applied_job?: string;
     assessment_results?: Array<{
         assessment_id: number;
         grade: string;
         feedback: string;
         submitted_at: string;
     }>;
+}
+
+interface JobData {
+    id: number;
+    title: string;
+    tags: string[];
+    requirements: string | null;
+    description: string | null;
 }
 
 interface SkillBar {
@@ -35,27 +44,88 @@ interface StrengthItem {
     description: string;
 }
 
-// --- Constants (Still used as fallback/placeholders where AI data is missing) ---
-const SKILL_BARS: SkillBar[] = [
-    { label: 'Problem Solving', score: 92 },
-    { label: 'Code Efficiency', score: 84 },
-    { label: 'System Architecture', score: 78 },
-];
+// --- Heuristic Utilities ---
 
-const STRENGTHS: StrengthItem[] = [
-    {
-        icon: 'check_circle',
-        iconColor: 'text-green-400',
-        category: 'Key Strength',
-        description: 'High technical proficiency',
-    },
-    {
-        icon: 'warning',
-        iconColor: 'text-yellow-400',
-        category: 'Notice',
-        description: 'No specific weaknesses noted.',
-    },
-];
+/**
+ * Extracts up to 3 key dimension labels from a job's tags + requirements text.
+ * Falls back to generic technical categories if no job data is available.
+ */
+const extractJobDimensions = (job: JobData | null): string[] => {
+    if (!job) return ['Problem Solving', 'Code Efficiency', 'System Architecture'];
+
+    const candidates: string[] = [];
+
+    // Use tags first (clean, curated labels)
+    if (job.tags && job.tags.length > 0) {
+        job.tags
+            .filter(tag => tag && tag.trim().length > 0)
+            .slice(0, 3)
+            .forEach(tag => candidates.push(tag.trim()));
+    }
+
+    // If we still need more, extract from requirements
+    if (candidates.length < 3 && job.requirements) {
+        const lines = job.requirements
+            .split(/[\n,;]+/)
+            .map(l => l.trim())
+            .filter(l => l.length > 3 && l.length < 40);
+        
+        lines.forEach(l => {
+            if (candidates.length < 3 && !candidates.includes(l)) {
+                candidates.push(l);
+            }
+        });
+    }
+
+    // Pad with sensible defaults
+    const defaults = ['Domain Knowledge', 'Technical Depth', 'Communication'];
+    while (candidates.length < 3) candidates.push(defaults[candidates.length]);
+
+    return candidates.slice(0, 3);
+};
+
+/** Score how well the candidate's CV text matches a given dimension label (0-100). */
+const scoreDimension = (label: string, candidate: CandidateData): number => {
+    const text = (candidate.raw_text || '' + (candidate.skills || []).join(' ')).toLowerCase();
+    const words = label.toLowerCase().split(/\s+/);
+    const hits = words.filter(w => w.length > 2 && text.includes(w)).length;
+    const baseFromSkills = Math.min(70, (candidate.skills?.length || 0) * 3);
+    const baseFromExp   = Math.min(15, (candidate.experience?.length || 0) * 3);
+    const keywordBonus  = Math.min(15, hits * 5);
+    return Math.min(97, 55 + baseFromSkills * 0.15 + baseFromExp + keywordBonus);
+};
+
+const calculateHeuristics = (candidate: CandidateData, job: JobData | null) => {
+    const skills = candidate.skills || [];
+    const experience = candidate.experience || [];
+
+    const dimensions = extractJobDimensions(job);
+    const bars = dimensions.map(label => ({
+        label,
+        score: Math.round(scoreDimension(label, candidate)),
+    }));
+
+    const overall = Math.round(bars.reduce((sum, b) => sum + b.score, 0) / bars.length);
+
+    return {
+        overall,
+        bars,
+        strengths: [
+            {
+                icon: 'check_circle',
+                iconColor: 'text-green-400',
+                category: 'CV Match',
+                description: skills.length > 5 ? 'High density of relevant skills identified.' : 'Solid technical foundation.',
+            },
+            {
+                icon: 'auto_awesome',
+                iconColor: 'text-blue-400',
+                category: 'Experience Level',
+                description: experience.length > 3 ? 'Substantial professional background.' : 'Early to mid-career profile.',
+            }
+        ]
+    };
+};
 
 // --- Helper Components ---
 
@@ -113,6 +183,7 @@ const CandidateProfile: React.FC = () => {
     const { id } = useParams();
     const [status, setStatus] = useState<CandidateStatus>('shortlist');
     const [candidate, setCandidate] = useState<CandidateData | null>(null);
+    const [jobData, setJobData] = useState<JobData | null>(null);
     const [loading, setLoading] = useState(true);
 
     // Popup state
@@ -125,8 +196,18 @@ const CandidateProfile: React.FC = () => {
             try {
                 const response = await fetch(`http://localhost:8001/api/v1/candidates/${id}`);
                 if (!response.ok) throw new Error('Candidate not found');
-                const data = await response.json();
+                const data: CandidateData = await response.json();
                 setCandidate(data);
+
+                // Fetch the associated job to build dynamic heuristic dimensions
+                if (data.applied_job && data.applied_job !== 'Uncategorized') {
+                    try {
+                        const jobRes = await fetch(`http://localhost:8001/api/v1/jobs/by-title/${encodeURIComponent(data.applied_job)}`);
+                        if (jobRes.ok) setJobData(await jobRes.json());
+                    } catch {
+                        // Job not found — fall back to generic dimensions
+                    }
+                }
             } catch (err) {
                 console.error(err);
             } finally {
@@ -343,26 +424,56 @@ const CandidateProfile: React.FC = () => {
 
                 {/* ── Center Column: AI Assessment Breakdown ── */}
                 <section className="col-span-12 lg:col-span-5 space-y-6">
-                    {/* Phase 1: Technical Quiz */}
-                    <div className="glass-panel rounded-xl p-6 shadow-sm">
-                        <div className="flex items-center justify-between mb-8">
-                            <div>
-                                <h3 className="text-xl font-bold">Phase 1: Technical Assessment</h3>
-                                <p className="text-sm text-accent">Heuristic Analysis Results</p>
-                            </div>
-                            <span className="bg-green-100 text-green-700 text-xs font-black px-2 py-1 rounded">
-                                ANALYSED
-                            </span>
-                        </div>
-                        <div className="flex items-center gap-10">
-                            <CircularProgress score={75} />
-                            <div className="flex-1 space-y-4">
-                                {SKILL_BARS.map((skill) => (
-                                    <SkillProgressBar key={skill.label} skill={skill} />
-                                ))}
-                            </div>
-                        </div>
-                    </div>
+                    {(() => {
+                        const heuristics = calculateHeuristics(candidate, jobData);
+                        return (
+                            <>
+                                {/* Phase 1: Technical Assessment - dimensions derived from job requirements */}
+                                <div className="glass-panel rounded-xl p-6 shadow-sm animate-fade-in">
+                                    <div className="flex items-center justify-between mb-8">
+                                        <div>
+                                            <h3 className="text-xl font-bold">Phase 1: Technical Assessment</h3>
+                                            <p className="text-sm text-accent">Heuristic Analysis Results</p>
+                                        </div>
+                                        <span className="bg-green-100 text-green-700 text-xs font-black px-2 py-1 rounded">
+                                            ANALYSED
+                                        </span>
+                                    </div>
+                                    <div className="flex items-center gap-10">
+                                        <div className="relative w-36 h-36 flex items-center justify-center">
+                                            <svg className="w-full h-full -rotate-90" viewBox="0 0 140 140">
+                                                <circle cx="70" cy="70" r="60" fill="transparent" stroke="#cbd5e1" strokeWidth="10" />
+                                                <circle
+                                                    cx="70"
+                                                    cy="70"
+                                                    r="60"
+                                                    fill="transparent"
+                                                    stroke="#415A77"
+                                                    strokeWidth="10"
+                                                    strokeDasharray={2 * Math.PI * 60}
+                                                    strokeDashoffset={2 * Math.PI * 60 - (heuristics.overall / 100) * 2 * Math.PI * 60}
+                                                    strokeLinecap="round"
+                                                    className="transition-all duration-700 ease-out"
+                                                />
+                                            </svg>
+                                            <div className="absolute w-28 h-28 bg-white rounded-full flex flex-col items-center justify-center shadow-sm">
+                                                <span className="text-3xl font-extrabold text-slate-800">
+                                                    {heuristics.overall}
+                                                    <small className="text-lg">%</small>
+                                                </span>
+                                                <span className="text-[10px] font-bold text-accent uppercase">AI Confidence</span>
+                                            </div>
+                                        </div>
+                                        <div className="flex-1 space-y-4">
+                                            {heuristics.bars.map((skill) => (
+                                                <SkillProgressBar key={skill.label} skill={skill} />
+                                            ))}
+                                        </div>
+                                    </div>
+                                </div>
+                            </>
+                        );
+                    })()}
 
                     {/* Assessment Results (Phase 2: Project Work) */}
                     {candidate.assessment_results && candidate.assessment_results.length > 0 && (
@@ -452,11 +563,14 @@ const CandidateProfile: React.FC = () => {
                         </div>
 
                         <p className="text-sm text-white/90 leading-relaxed mb-6 italic">
-                            "Automatic extraction successful. Candidate processed from Google Drive repository."
+                            "{jobData
+                                ? `Heuristic dimensions sourced from '${jobData.title}' job requirements. Score: ${calculateHeuristics(candidate, jobData).overall}%.`
+                                : `Automatic extraction complete. AI Confidence: ${calculateHeuristics(candidate, null).overall}%.`
+                            }"
                         </p>
 
                         <div className="space-y-4">
-                            {STRENGTHS.map((item, idx) => (
+                            {calculateHeuristics(candidate).strengths.map((item, idx) => (
                                 <div key={idx} className="flex items-start gap-3">
                                     <span className={`material-symbols-outlined ${item.iconColor} text-sm mt-1`}>
                                         {item.icon}

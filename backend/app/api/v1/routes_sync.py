@@ -25,7 +25,16 @@ _sync_state: dict = {
     "failed": 0,
     "error": None,
 }
+
+_calendar_sync_state: dict = {
+    "running": False,
+    "last_run": None,
+    "new_events": 0,
+    "error": None,
+}
+
 _lock = threading.Lock()
+_calendar_lock = threading.Lock()
 
 
 class SyncStatus(BaseModel):
@@ -38,128 +47,104 @@ class SyncStatus(BaseModel):
 
 
 def _run_sync_task():
-    """Wrapper that runs the orchestrator and updates _sync_state."""
+    """Wrapper that runs the modular orchestrator and updates _sync_state."""
     import sys
     from pathlib import Path
 
     # Make sure backend root is on the path
     backend_dir = Path(__file__).parent.parent.parent.parent   # .../backend
-    sys.path.insert(0, str(backend_dir))
+    if str(backend_dir) not in sys.path:
+        sys.path.insert(0, str(backend_dir))
 
     with _lock:
         _sync_state["running"] = True
         _sync_state["error"] = None
 
     try:
-        # Import here (not at module level) so the router loads even if
-        # google-api libs aren't installed yet.
         from drive_sync_orchestrator import run_sync, FOLDER_ID
-
+        
         if not FOLDER_ID or FOLDER_ID == "YOUR_FOLDER_ID_HERE":
-            with _lock:
-                _sync_state["error"] = (
-                    "GOOGLE_DRIVE_FOLDER_ID is not set in .env. "
-                    "Please add the folder ID and restart the server."
-                )
-            return
+            raise ValueError("GOOGLE_DRIVE_FOLDER_ID is not set in .env.")
 
-        # Monkey-patch the orchestrator's summary counters so we can
-        # read them back into _sync_state after the run.
-        import drive_sync_orchestrator as _orch
-
-        processed_ref = [0]
-        skipped_ref   = [0]
-        failed_ref    = [0]
-
-        original_run_sync = _orch.run_sync
-
-        def _patched_sync():
-            """Thin wrapper to capture per-run counters."""
-            import io, os, logging
-            from pathlib import Path as _Path
-
-            log = logging.getLogger("DriveSync")
-            folder_id   = _orch.FOLDER_ID
-            backend_url = _orch.BACKEND_API_URL
-
-            if not folder_id:
-                return
-
-            service = _orch._build_drive_service()
-            files   = _orch._list_files(service, folder_id)
-
-            if not files:
-                log.info("No supported files found in Drive folder.")
-                return
-
-            log.info("Found %d file(s) in Drive folder.", len(files))
-
-            for file in files:
-                file_id   = file["id"]
-                filename  = file["name"]
-                mime_type = file["mimeType"]
-
-                if _orch._is_already_synced(file_id):
-                    log.info("  ⏭  Skipping (already synced): %s", filename)
-                    skipped_ref[0] += 1
-                    continue
-
-                log.info("  ▶  Processing: %s  (%s)", filename, mime_type)
-
-                try:
-                    file_bytes = _orch._download_file(service, file_id, mime_type)
-                    raw_text   = _orch._extract_text(file_bytes, mime_type, filename)
-
-                    if not raw_text.strip():
-                        log.warning("     No text extracted from %s – skipping.", filename)
-                        failed_ref[0] += 1
-                        continue
-
-                    log.info("     Running Claude CV analysis …")
-                    from app.schemas.cv_extraction import extract_resume_fields
-                    profile = extract_resume_fields(raw_text)
-
-                    payload = {
-                        "drive_file_id": file_id,
-                        "filename":      filename,
-                        "raw_text":      raw_text,
-                        "name":          profile.name,
-                        "email":         profile.email,
-                        "phone":         profile.phone,
-                        "summary":       profile.summary,
-                        "skills":        profile.skills,
-                        "experience":    profile.experience,
-                        "education":     profile.education,
-                    }
-
-                    saved = _orch._save_to_db(payload)
-                    if saved:
-                        log.info(
-                            "     ✅ Saved → id=%s  name=%s",
-                            saved.get("id"), saved.get("name"),
-                        )
-                        processed_ref[0] += 1
-                    else:
-                        failed_ref[0] += 1
-
-                except Exception as exc:
-                    log.exception("     ❌ Error processing %s: %s", filename, exc)
-                    failed_ref[0] += 1
-
-        _patched_sync()
+        # Run the robust, recursive sync from the orchestrator
+        processed, skipped, failed = run_sync()
 
         with _lock:
-            _sync_state["processed"] = processed_ref[0]
-            _sync_state["skipped"]   = skipped_ref[0]
-            _sync_state["failed"]    = failed_ref[0]
+            _sync_state["processed"] = processed
+            _sync_state["skipped"]   = skipped
+            _sync_state["failed"]    = failed
+            _sync_state["status"]    = "success"
+
+        # Persistence
+        from app.config.database import SessionLocal
+        from app.models.sync_history import SyncHistory
+        db = SessionLocal()
+        try:
+            history = SyncHistory(
+                status="success",
+                processed=processed,
+                skipped=skipped,
+                failed=failed
+            )
+            db.add(history)
+            db.commit()
+        finally:
+            db.close()
 
     except Exception as exc:
+        err_msg = str(exc)
+        friendly_error = err_msg
+        
+        # Proactive troubleshooting for common Google API errors
+        if "invalid_grant" in err_msg.lower():
+            friendly_error = "Authentication failed (invalid_grant). Likely cause: System Clock out of sync. Please ensure your machine's time is synchronized with an NTP server."
+        elif "quota" in err_msg.lower():
+            friendly_error = "Google Drive API quota exceeded. Please wait a few minutes and try again."
+
         with _lock:
-            _sync_state["error"] = str(exc)
+            _sync_state["error"] = friendly_error
+            _sync_state["status"] = "failed"
+        
+        from app.config.database import SessionLocal
+        from app.models.sync_history import SyncHistory
+        db = SessionLocal()
+        try:
+            history = SyncHistory(
+                status="failed",
+                error=friendly_error
+            )
+            db.add(history)
+            db.commit()
+        finally:
+            db.close()
+
     finally:
         with _lock:
             _sync_state["running"]  = False
             _sync_state["last_run"] = datetime.utcnow().isoformat() + "Z"
+
+
+def _run_calendar_sync_task():
+    """Wrapper for the calendar sync orchestrator."""
+    with _calendar_lock:
+        _calendar_sync_state["running"] = True
+        _calendar_sync_state["error"] = None
+
+    try:
+        from calendar_sync_orchestrator import sync_interviews
+        new_count, error = sync_interviews()
+        
+        with _calendar_lock:
+            _calendar_sync_state["new_events"] = new_count
+            if error:
+                _calendar_sync_state["error"] = error
+    except Exception as e:
+        with _calendar_lock:
+            _calendar_sync_state["error"] = str(e)
+    finally:
+        with _calendar_lock:
+            _calendar_sync_state["running"] = False
+            _calendar_sync_state["last_run"] = datetime.utcnow().isoformat() + "Z"
 
 
 # ── routes ────────────────────────────────────────────────────────────────────
@@ -183,3 +168,30 @@ def get_sync_status():
     """Return the result / status of the last (or current) sync run."""
     with _lock:
         return SyncStatus(**_sync_state)
+
+@router.get("/history")
+def get_sync_history():
+    """Fetch the last 10 sync operations from the database."""
+    from app.config.database import SessionLocal
+    from app.models.sync_history import SyncHistory
+    db = SessionLocal()
+    try:
+        return db.query(SyncHistory).order_by(SyncHistory.timestamp.desc()).limit(10).all()
+    finally:
+        db.close()
+
+@router.post("/calendar", status_code=202)
+def trigger_calendar_sync(background_tasks: BackgroundTasks):
+    """Trigger the Google Calendar → DB sync."""
+    with _calendar_lock:
+        if _calendar_sync_state["running"]:
+            raise HTTPException(status_code=409, detail="Calendar sync is already running.")
+    
+    background_tasks.add_task(_run_calendar_sync_task)
+    return {"message": "Calendar sync started."}
+
+@router.get("/calendar/status")
+def get_calendar_sync_status():
+    """Return the status of the last calendar sync."""
+    with _calendar_lock:
+        return _calendar_sync_state
