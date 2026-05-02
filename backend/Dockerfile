@@ -27,4 +27,5 @@ COPY . .
 EXPOSE 8001
 
 # Run the application
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8001", "--reload"]
+# Run the application
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8001", "--reload", "--reload-exclude", "venv", "--reload-exclude", "__pycache__", "--reload-exclude", "*.db", "--reload-exclude", "*.sqlite3"]

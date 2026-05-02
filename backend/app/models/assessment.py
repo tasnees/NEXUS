@@ -11,7 +11,14 @@ class Assessment(Base):
     difficulty = Column(String)
     focus = Column(JSON) # e.g. ["Python", "React"]
     description = Column(String)
+    steps = Column(JSON, default=list) # Step-by-step instructions
+    required_format = Column(String, default="text") # e.g. "python", "javascript", "css", "markdown"
     
     # Each assessment belongs to one job
     job_id = Column(Integer, ForeignKey("jobs.id"))
     job = relationship("Job")
+
+    # Grading Intelligence
+    grading_threshold = Column(Integer, default=70) # Passing percentage
+    auto_reject = Column(Integer, default=0) # 1 for True, 0 for False (or use Boolean)
+    evaluation_nodes = Column(JSON, default=list) # e.g. ["Code Quality", "Efficiency"]

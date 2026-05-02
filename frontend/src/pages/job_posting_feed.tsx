@@ -1,544 +1,717 @@
+import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { 
+    Briefcase, 
+    Users, 
+    Clock, 
+    AlertCircle, 
+    Search, 
+    ChevronRight, 
+    Plus, 
+    Archive,
+    MapPin,
+    DollarSign,
+    User,
+    Calendar,
+    X,
+    CheckCircle,
+    Info,
+    Sparkles,
+    Send,
+    Loader2,
+    Globe,
+    Building
+} from 'lucide-react';
 
-import React, { useEffect, useState } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
-
-// Job Card Interface
-interface JobPosting {
-    id: string;
-    title: string;
-    companyLogo: string;
-    location: string;
-    postedAt: string;
-    status: 'Live Posting' | 'Action Required' | 'Draft' | 'Archived';
-    applicants: number;
-    matchRate: number;
-    interviewed: number;
-    tags: string[];
+// --- Types ---
+interface Pipeline {
+    applied: number;
+    screening: number;
+    interview: number;
+    assessment: number;
+    offer: number;
 }
+
+interface Position {
+    id: number;
+    title: string;
+    department: string;
+    location: string;
+    type: string;
+    salary: string;
+    posted: string;
+    status: string;
+    manager: string;
+    applicants: number;
+    pipeline: Pipeline;
+    urgency: 'high' | 'medium' | 'low';
+    description: string;
+}
+
+const MAKE_WEBHOOK_URL = "https://hook.eu1.make.com/wyv5w8y6awvl56u2y5a253680ndkrqyx";
 
 const JobPostingFeed: React.FC = () => {
     const navigate = useNavigate();
-
-    const [jobs, setJobs] = useState<JobPosting[]>([]);
+    const [positions, setPositions] = useState<Position[]>([]);
     const [loading, setLoading] = useState(true);
-    const [error, setError] = useState<string | null>(null);
+    const [searchQuery, setSearchQuery] = useState('');
+    const [deptFilter, setDeptFilter] = useState('all');
+    
+    // Modal state (Details)
+    const [selectedPosition, setSelectedPosition] = useState<Position | null>(null);
     const [isModalOpen, setIsModalOpen] = useState(false);
+    const [isModalVisible, setIsModalVisible] = useState(false);
+
+    // Create Modal state
+    const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+    const [isCreateModalVisible, setIsCreateModalVisible] = useState(false);
+    const [isEnriching, setIsEnriching] = useState(false);
     const [isSubmitting, setIsSubmitting] = useState(false);
+
     const [formData, setFormData] = useState({
         title: '',
-        company: '',
+        department: '',
+        location: 'Remote',
+        nature: 'online', // for backend: onsite, online, hybrid
         salary: '',
-        timePerWeek: '',
-        nature: 'hybrid',
-        requirements: '',
         description: '',
-        tags: ''
+        company: 'HireSync AI',
+        status: 'active',
+        timePerWeek: '40 hours'
     });
 
-    const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
-        const { name, value } = e.target;
-        setFormData(prev => ({ ...prev, [name]: value }));
+    // Toast state
+    const [toasts, setToasts] = useState<Array<{id: number, msg: string, type: 'success' | 'danger' | 'info'}>>([]);
+
+    const showToast = (msg: string, type: 'success' | 'danger' | 'info' = 'success') => {
+        const id = Date.now();
+        setToasts(prev => [...prev, { id, msg, type }]);
+        setTimeout(() => {
+            setToasts(prev => prev.filter(t => t.id !== id));
+        }, 3000);
+    };
+
+    const fetchPositions = async () => {
+        setLoading(true);
+        try {
+            const response = await fetch('http://localhost:8001/api/v1/jobs/');
+            if (response.ok) {
+                const data = await response.json();
+                const mapped: Position[] = data.map((j: any) => ({
+                    id: j.id,
+                    title: j.title,
+                    department: j.department || (j.tags && j.tags[0]) || 'Engineering',
+                    location: j.location || 'Remote',
+                    type: j.nature || 'Full-time',
+                    salary: j.salary || '$120K – $160K',
+                    posted: j.posted_at || new Date().toISOString(),
+                    status: j.status || 'active',
+                    manager: j.manager || 'Hiring Team',
+                    applicants: j.applicants || 0,
+                    pipeline: j.pipeline || {
+                        applied: j.applicants || 0,
+                        screening: Math.floor((j.applicants || 0) * 0.6),
+                        interview: Math.floor((j.applicants || 0) * 0.3),
+                        assessment: Math.floor((j.applicants || 0) * 0.1),
+                        offer: 0
+                    },
+                    urgency: j.urgency || (Math.random() > 0.7 ? 'high' : 'medium'),
+                    description: j.description || "No description provided."
+                }));
+                setPositions(mapped);
+            }
+        } catch (err) {
+            console.error("Failed to fetch positions", err);
+            showToast("Failed to load positions", "danger");
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    useEffect(() => {
+        fetchPositions();
+    }, []);
+
+    const filteredPositions = positions.filter(p => {
+        const matchesSearch = p.title.toLowerCase().includes(searchQuery.toLowerCase()) || 
+                             p.department.toLowerCase().includes(searchQuery.toLowerCase());
+        const matchesDept = deptFilter === 'all' || p.department.toLowerCase() === deptFilter.toLowerCase();
+        return matchesSearch && matchesDept;
+    });
+
+    const getUrgencyConfig = (u: string) => {
+        const configs: Record<string, any> = {
+            high: { label: 'High Priority', color: 'bg-red-50 text-red-700 border-red-200' },
+            medium: { label: 'Medium', color: 'bg-amber-50 text-amber-700 border-amber-200' },
+            low: { label: 'Low', color: 'bg-slate-50 text-slate-600 border-slate-200' }
+        };
+        return configs[u] || configs.low;
+    };
+
+    const openDetails = (p: Position) => {
+        setSelectedPosition(p);
+        setIsModalOpen(true);
+        setTimeout(() => setIsModalVisible(true), 10);
+    };
+
+    const closeModal = () => {
+        setIsModalVisible(false);
+        setTimeout(() => {
+            setIsModalOpen(false);
+            setSelectedPosition(null);
+        }, 300);
+    };
+
+    const openCreateModal = () => {
+        setIsCreateModalOpen(true);
+        setTimeout(() => setIsCreateModalVisible(true), 10);
+    };
+
+    const closeCreateModal = () => {
+        setIsCreateModalVisible(false);
+        setTimeout(() => {
+            setIsCreateModalOpen(false);
+            setFormData({
+                title: '',
+                department: '',
+                location: 'Remote',
+                nature: 'online',
+                salary: '',
+                description: '',
+                company: 'HireSync AI',
+                status: 'active',
+                timePerWeek: '40 hours'
+            });
+        }, 300);
+    };
+
+    const handleAutoFill = async () => {
+        if (!formData.title) {
+            showToast("Enter a job title first!", "info");
+            return;
+        }
+        setIsEnriching(true);
+        showToast("AI is generating details...", "info");
+        try {
+            const response = await fetch(`http://localhost:8001/api/v1/ai/enrich?title=${encodeURIComponent(formData.title)}`);
+            if (response.ok) {
+                const aiData = await response.json();
+                setFormData(prev => ({
+                    ...prev,
+                    salary: prev.salary || aiData.salary || '',
+                    description: prev.description || aiData.description || '',
+                    department: prev.department || (aiData.tags && aiData.tags[0]) || ''
+                }));
+                showToast("AI Enrichment complete!", "success");
+            }
+        } catch (err) {
+            showToast("AI enrichment failed", "danger");
+        } finally {
+            setIsEnriching(false);
+        }
     };
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         setIsSubmitting(true);
+        
         try {
-            const jobData = {
-                ...formData,
-                postedAt: new Date().toISOString(),
-                status: 'Live Posting',
-                tags: formData.tags.split(',').map(tag => tag.trim())
-            };
-
-            // Post to Automation Webhook
-            const webhookRequest = fetch('https://hook.eu1.make.com/wyv5w8y6awvl56u2y5a253680ndkrqyx', {
+            // 1. Send to Webhook
+            const webhookPromise = fetch(MAKE_WEBHOOK_URL, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(jobData),
+                body: JSON.stringify({
+                    ...formData,
+                    event: 'job_created',
+                    timestamp: new Date().toISOString()
+                })
             });
 
-            // Post to Backend DB
-            const dbRequest = fetch('http://localhost:8001/api/v1/jobs/', {
+            // 2. Save to Backend
+            const backendPromise = fetch('http://localhost:8001/api/v1/jobs/', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(jobData),
+                body: JSON.stringify(formData)
             });
 
-            const [webhookResponse, dbResponse] = await Promise.all([webhookRequest, dbRequest]);
+            const [, backendRes] = await Promise.all([webhookPromise, backendPromise]);
 
-            if (webhookResponse.ok && dbResponse.ok) {
-                setIsModalOpen(false);
-                setFormData({
-                    title: '',
-                    company: '',
-                    salary: '',
-                    timePerWeek: '',
-                    nature: 'hybrid',
-                    requirements: '',
-                    description: '',
-                    tags: ''
-                });
-                // Refresh jobs after a small delay
-                setTimeout(() => window.location.reload(), 1000);
+            if (backendRes.ok) {
+                showToast("Job posted successfully!", "success");
+                closeCreateModal();
+                fetchPositions();
+            } else {
+                showToast("Failed to save job locally", "danger");
             }
-        } catch (error) {
-            console.error('Error posting job:', error);
+        } catch (err) {
+            showToast("Error submitting job", "danger");
         } finally {
             setIsSubmitting(false);
         }
     };
 
-    // Dynamically load Google Fonts for Material Symbols if not already present
-    useEffect(() => {
-        const linkId = 'material-symbols-font';
-        if (!document.getElementById(linkId)) {
-            const link = document.createElement('link');
-            link.id = linkId;
-            link.rel = 'stylesheet';
-            link.href = 'https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap';
-            document.head.appendChild(link);
-        }
-
-        // Fetch jobs from backend
-        const fetchJobs = async () => {
-            try {
-                const response = await fetch('http://localhost:8001/api/v1/jobs/');
-                if (!response.ok) throw new Error('Failed to fetch jobs');
-                const data = await response.json();
-                
-                // Map backend snake_case to frontend camelCase
-                const mappedJobs = data.map((job: any) => ({
-                    id: job.id.toString(),
-                    title: job.title,
-                    companyLogo: job.company_logo,
-                    location: job.location,
-                    postedAt: job.posted_at,
-                    status: job.status,
-                    applicants: job.applicants,
-                    matchRate: job.match_rate,
-                    interviewed: job.interviewed,
-                    tags: job.tags || []
-                }));
-                setJobs(mappedJobs);
-            } catch (err) {
-                setError(err instanceof Error ? err.message : 'An error occurred');
-            } finally {
-                setLoading(false);
-            }
-        };
-
-        fetchJobs();
-    }, []);
+    const stats = [
+        { icon: Briefcase, color: 'emerald', label: 'Active', value: positions.length },
+        { icon: Users, color: 'blue', label: 'Total Applicants', value: positions.reduce((acc, p) => acc + p.applicants, 0) },
+        { icon: Clock, color: 'purple', label: 'Avg. Days Open', value: '18d' },
+        { icon: AlertCircle, color: 'amber', label: 'Need Attention', value: positions.filter(p => p.urgency === 'high').length }
+    ];
 
     return (
-        <div className="min-h-screen bg-background font-sans text-header antialiased">
-            {/* Navigation */}
-            <nav className="bg-header text-white sticky top-0 z-50 shadow-lg border-b border-primary/20">
-                <div className="max-w-[1440px] mx-auto px-6 h-20 flex items-center justify-between">
-                    <div className="flex items-center gap-12">
-                        <div className="flex items-center gap-3">
-                            <div className="w-10 h-10 bg-secondary rounded-xl flex items-center justify-center shadow-inner">
-                                <span className="material-symbols-outlined text-white">neurology</span>
-                            </div>
-                            <span className="text-2xl font-extrabold tracking-tight">RECRUIT<span className="text-secondary text-lg">AI</span></span>
+        <div className="flex-1 flex flex-col bg-base animate-fade-in relative pb-12">
+            {/* Header Section */}
+            <section className="px-8 pt-6 pb-0">
+                <div className="flex items-center justify-between">
+                    <div>
+                        <div className="flex items-center gap-2 text-sm text-txt-muted mb-1">
+                            <button onClick={() => navigate('/dashboard')} className="hover:text-primary transition-colors">Overview</button>
+                            <ChevronRight className="w-3 h-3" />
+                            <span className="text-txt-primary">Positions</span>
                         </div>
-                        <div className="hidden lg:flex items-center gap-8 text-[15px] font-medium">
-                            <Link to="/dashboard" className="text-secondary hover:text-white transition-colors">Dashboard</Link>
-                            <Link to="/candidates" className="text-secondary hover:text-white transition-colors">Talent Pool</Link>
-                            <Link to="/sentiment-analysis" className="text-secondary hover:text-white transition-colors">Sentiment Analytics</Link>
-                            <Link to="/jobs" className="text-white border-b-2 border-secondary pb-1">Jobs Feed</Link>
-                        </div>
+                        <h2 className="text-2xl font-semibold tracking-tight text-txt-primary">Open Positions</h2>
+                        <p className="text-sm text-txt-muted mt-0.5">Manage job postings and track hiring progress</p>
                     </div>
-                    <div className="flex items-center gap-6">
-                        <div className="relative group hidden md:block">
-                            <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-secondary/60 text-xl">search</span>
-                            <input 
-                                type="text" 
-                                placeholder="Search postings or candidates..." 
-                                className="bg-[#24334d] border-none rounded-lg pl-11 pr-4 py-2.5 text-sm w-72 focus:ring-2 focus:ring-secondary/50 transition-all placeholder:text-secondary/50 text-white"
-                            />
-                        </div>
-                        <div className="flex items-center gap-4">
-                            <button className="w-10 h-10 flex items-center justify-center rounded-full hover:bg-white/10 transition-colors relative">
-                                <span className="material-symbols-outlined">notifications</span>
-                                <span className="absolute top-2 right-2 w-2 h-2 bg-red-500 rounded-full border-2 border-header"></span>
-                            </button>
-                            <div className="h-10 w-[1px] bg-white/10 mx-2"></div>
-                            <div className="flex items-center gap-3 cursor-pointer group">
-                                <div className="text-right hidden sm:block">
-                                    <div className="text-xs font-bold text-white leading-none">Sarah Jenkins</div>
-                                    <div className="text-[10px] text-secondary font-bold uppercase tracking-wider">Senior Recruiter</div>
-                                </div>
-                                <div className="w-10 h-10 rounded-full overflow-hidden border-2 border-secondary/30 ring-2 ring-transparent group-hover:ring-secondary/50 transition-all">
-                                    <img 
-                                        src="https://lh3.googleusercontent.com/aida-public/AB6AXuBN44XhRrUZ5Rhi4R-8BlXAD0iOXxn3iO7fzfVo9KJE_76Q7I8IqLCn1sc90ByAluXvbBL6cB4XQ33rho80EDOxGOXqMgOCZpNenacLC4A7xERvdoeIKXs-GajIgRSH1HunmJoJmZruSn2TQpdzi5B6xzgDdXOiiG5Tz3Qpjha1n7zf64BKXbaJ_11YGEMqgprZJ1GxOoBjD5cXnUerxdn5JDWvQxpbQMbHCmYtr4bL5X8zgcNsdVtZTOet9lpLTAmRCXtWsZkOFfdk" 
-                                        alt="Profile" 
-                                        className="w-full h-full object-cover" 
-                                    />
-                                </div>
-                            </div>
-                        </div>
+                    <div className="flex items-center gap-3">
+                        <button className="px-4 py-2 bg-white hover:bg-elevated text-sm font-medium rounded-lg border border-bdr transition-all flex items-center gap-2 text-txt-primary shadow-sm">
+                            <Archive className="w-4 h-4" />Closed (12)
+                        </button>
+                        <button 
+                            onClick={openCreateModal}
+                            className="px-4 py-2 bg-primary hover:bg-primary-dark text-sm font-medium rounded-lg transition-all flex items-center gap-2 text-white shadow-lg shadow-primary/20"
+                        >
+                            <Plus className="w-4 h-4" />Create Position
+                        </button>
                     </div>
                 </div>
-            </nav>
+            </section>
 
-            <main className="max-w-[1440px] mx-auto px-6 py-10 flex gap-8">
-                {/* Sidebar */}
-                <aside className="w-72 flex-shrink-0 space-y-6 hidden md:block">
-                    <button 
-                        onClick={() => setIsModalOpen(true)}
-                        className="w-full bg-primary hover:bg-navy-deep text-white py-4 px-6 rounded-xl font-bold flex items-center justify-center gap-3 shadow-lg shadow-primary/20 transition-all group"
-                    >
-                        <span className="material-symbols-outlined group-hover:rotate-12 transition-transform">bolt</span>
-                        Post New Job (AI)
-                    </button>
-                    
-                    <div className="bg-surface p-6 rounded-xl shadow-sm border border-secondary/10">
-                        <h3 className="text-xs font-bold uppercase tracking-widest mb-5 text-secondary">Recruitment Tools</h3>
-                        <nav className="space-y-1">
-                            <Link to="/jobs" className="flex items-center gap-3 p-3 rounded-lg bg-background text-primary font-bold transition-all">
-                                <span className="material-symbols-outlined text-xl">dashboard</span>
-                                <span className="text-sm">Active Postings</span>
-                            </Link>
-                            <Link to="/candidates" className="flex items-center gap-3 p-3 rounded-lg text-secondary hover:bg-background/50 hover:text-header transition-all">
-                                <span className="material-symbols-outlined text-xl">group</span>
-                                <span className="text-sm">Candidate Pool</span>
-                            </Link>
-                            <a href="#" className="flex items-center gap-3 p-3 rounded-lg text-secondary hover:bg-background/50 hover:text-header transition-all">
-                                <span className="material-symbols-outlined text-xl">history_edu</span>
-                                <span className="text-sm">AI Interview Logs</span>
-                            </a>
-                            <Link to="/interviews" className="flex items-center gap-3 p-3 rounded-lg text-secondary hover:bg-background/50 hover:text-header transition-all">
-                                <span className="material-symbols-outlined text-xl">event_available</span>
-                                <span className="text-sm">Scheduled Interviews</span>
-                            </Link>
-                        </nav>
-                    </div>
-
-                    <div className="bg-surface p-6 rounded-xl shadow-sm border border-secondary/10">
-                        <h3 className="text-xs font-bold uppercase tracking-widest mb-5 text-secondary">Hiring Status</h3>
-                        <div className="space-y-4">
-                            <label className="flex items-center justify-between cursor-pointer group">
-                                <div className="flex items-center gap-3">
-                                    <input type="checkbox" defaultChecked className="w-5 h-5 rounded border-secondary/30 text-primary focus:ring-primary/20 bg-background" />
-                                    <span className="text-sm font-medium text-header/80 group-hover:text-primary transition-colors">Published</span>
-                                </div>
-                                <span className="text-[10px] bg-background px-2 py-0.5 rounded-full font-bold opacity-60 text-header">12</span>
-                            </label>
-                            <label className="flex items-center justify-between cursor-pointer group">
-                                <div className="flex items-center gap-3">
-                                    <input type="checkbox" className="w-5 h-5 rounded border-secondary/30 text-primary focus:ring-primary/20 bg-background" />
-                                    <span className="text-sm font-medium text-header/80 group-hover:text-primary transition-colors">Drafts</span>
-                                </div>
-                                <span className="text-[10px] bg-background px-2 py-0.5 rounded-full font-bold opacity-60 text-header">4</span>
-                            </label>
-                            <label className="flex items-center justify-between cursor-pointer group">
-                                <div className="flex items-center gap-3">
-                                    <input type="checkbox" className="w-5 h-5 rounded border-secondary/30 text-primary focus:ring-primary/20 bg-background" />
-                                    <span className="text-sm font-medium text-header/80 group-hover:text-primary transition-colors">Archived</span>
-                                </div>
-                                <span className="text-[10px] bg-background px-2 py-0.5 rounded-full font-bold opacity-60 text-header">45</span>
-                            </label>
-                        </div>
-                    </div>
-
-                    <div className="pt-2">
-                        <div className="bg-navy-deep p-6 rounded-xl text-white">
-                            <div className="flex items-center gap-2 mb-4">
-                                <span className="material-symbols-outlined text-xl text-secondary">speed</span>
-                                <span className="text-xs font-bold uppercase tracking-wider text-secondary">Pipeline Health</span>
-                            </div>
-                            <div className="flex items-end gap-2 mb-1">
-                                <div className="text-3xl font-bold">88%</div>
-                                <div className="text-[10px] text-emerald-400 font-bold mb-1.5">+5.2%</div>
-                            </div>
-                            <p className="text-[11px] text-secondary leading-relaxed mb-5">
-                                Your automated vetting pipelines are processing candidates 14% faster than last month.
-                            </p>
-                            <div className="w-full bg-white/10 h-1.5 rounded-full mb-6">
-                                <div className="bg-secondary h-full rounded-full w-[88%]"></div>
-                            </div>
-                            <button className="w-full py-2.5 bg-primary text-white text-xs font-bold rounded-lg hover:bg-secondary transition-colors">Optimize n8n Nodes</button>
-                        </div>
-                    </div>
-                </aside>
-
-                {/* Main Content */}
-                <section className="flex-grow">
-                    <div className="flex flex-col lg:flex-row lg:items-end justify-between mb-8 gap-4">
-                        <div>
-                            <h1 className="text-3xl font-extrabold text-header mb-2 tracking-tight">Active Job Postings Management</h1>
-                            <p className="text-secondary font-medium">Monitoring 12 live postings and AI-driven candidate ranking.</p>
-                        </div>
-                        <div className="flex items-center gap-4">
+            {/* Quick Stats */}
+            <section className="px-8 pt-5 pb-0">
+                <div className="grid grid-cols-4 gap-4">
+                    {stats.map((s, idx) => (
+                        <div key={idx} className="stat-card bg-surface rounded-xl p-4 cursor-pointer">
                             <div className="flex items-center gap-3">
-                                <span className="text-sm font-medium text-secondary">Sort:</span>
-                                <select className="bg-surface border-secondary/20 rounded-lg text-sm font-semibold text-header focus:ring-primary/20 px-4 pr-10 py-2.5 cursor-pointer shadow-sm">
-                                    <option>Highest Match Rate</option>
-                                    <option>Most Recent</option>
-                                    <option>Total Applicants</option>
-                                </select>
-                            </div>
-                            <button className="p-2.5 bg-surface border border-secondary/20 rounded-lg text-secondary hover:text-primary transition-colors shadow-sm">
-                                <span className="material-symbols-outlined">filter_list</span>
-                            </button>
-                        </div>
-                    </div>
-
-                    <div className="space-y-5">
-                        {loading && (
-                            <div className="flex flex-col items-center justify-center py-20 text-secondary">
-                                <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mb-4"></div>
-                                <p className="font-bold uppercase tracking-widest text-[10px]">Synchronizing with AI Nodes...</p>
-                            </div>
-                        )}
-
-                        {error && (
-                            <div className="bg-red-50 border border-red-200 p-8 rounded-xl text-center">
-                                <span className="material-symbols-outlined text-red-400 text-4xl mb-3">error</span>
-                                <h3 className="text-red-800 font-bold mb-1">Backend Connection Failed</h3>
-                                <p className="text-red-600 text-sm mb-4">{error}</p>
-                                <button 
-                                    onClick={() => window.location.reload()} 
-                                    className="px-6 py-2 bg-red-600 text-white rounded-lg text-sm font-bold shadow-lg shadow-red-200"
-                                >
-                                    Retry Connection
-                                </button>
-                            </div>
-                        )}
-
-                        {!loading && !error && jobs.length === 0 && (
-                            <div className="bg-surface border border-dashed border-secondary/30 p-20 rounded-xl text-center">
-                                <span className="material-symbols-outlined text-secondary/40 text-6xl mb-4">description</span>
-                                <h3 className="text-header font-bold mb-1 text-xl">No Active Postings</h3>
-                                <p className="text-secondary max-w-xs mx-auto">Your pipeline is currently clear. Ready to source some talent?</p>
-                            </div>
-                        )}
-
-                        {!loading && !error && jobs.map((job: JobPosting) => (
-                            <div key={job.id} className="bg-surface p-7 rounded-xl border border-secondary/20 shadow-sm relative overflow-hidden group hover:-translate-y-0.5 hover:shadow-xl transition-all duration-200 ease-[cubic-bezier(0.4,0,0.2,1)]">
-                                <div className="flex flex-col sm:flex-row gap-6">
-                                    <div className="w-20 h-20 rounded-xl overflow-hidden bg-background flex-shrink-0 border border-secondary/10">
-                                        <img src={job.companyLogo} alt="Company Logo" className="w-full h-full object-cover" />
-                                    </div>
-                                    <div className="flex-grow">
-                                        <div className="flex justify-between items-start mb-2">
-                                            <div>
-                                                <h2 className="text-xl font-bold text-header group-hover:text-primary transition-colors cursor-pointer">{job.title}</h2>
-                                                <div className="flex items-center gap-3 mt-1">
-                                                    <span className="text-sm font-semibold text-secondary flex items-center gap-1.5">
-                                                        <span className="material-symbols-outlined text-[16px]">{job.location === 'Remote' ? 'cloud' : job.location.includes('UK') ? 'apartment' : 'location_on'}</span> {job.location}
-                                                    </span>
-                                                    <span className="w-1 h-1 rounded-full bg-secondary/40"></span>
-                                                    <span className="text-sm font-medium text-secondary">{job.postedAt}</span>
-                                                </div>
-                                            </div>
-                                            <div className="flex flex-col items-end gap-2">
-                                                {job.status === 'Live Posting' && (
-                                                    <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-50 text-emerald-700 text-[11px] font-bold uppercase tracking-wider border border-emerald-100">
-                                                        <span className="material-symbols-outlined text-sm">check_circle</span> Live Posting
-                                                    </span>
-                                                )}
-                                                {job.status === 'Action Required' && (
-                                                    <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-50 text-amber-700 text-[11px] font-bold uppercase tracking-wider border border-amber-100">
-                                                        <span className="material-symbols-outlined text-sm">schedule</span> Action Required
-                                                    </span>
-                                                )}
-                                            </div>
-                                        </div>
-
-                                        <div className="grid grid-cols-3 gap-4 my-5 py-4 border-y border-background">
-                                            <div className="text-center border-r border-background">
-                                                <div className="text-lg font-extrabold text-header">{job.applicants}</div>
-                                                <div className="text-[10px] text-secondary font-bold uppercase tracking-widest">Applicants</div>
-                                            </div>
-                                            <div className="text-center border-r border-background">
-                                                <div className="text-lg font-extrabold text-primary">{job.matchRate}%</div>
-                                                <div className="text-[10px] text-secondary font-bold uppercase tracking-widest">Avg. Match Rate</div>
-                                            </div>
-                                            <div className="text-center">
-                                                <div className="text-lg font-extrabold text-header">{job.interviewed}</div>
-                                                <div className="text-[10px] text-secondary font-bold uppercase tracking-widest">
-                                                    {job.status === 'Action Required' ? 'New Vetted' : 'Interviewed'}
-                                                </div>
-                                            </div>
-                                        </div>
-
-                                        <div className="flex flex-wrap items-center justify-between gap-4">
-                                            <div className="flex gap-2">
-                                                {job.tags.map((tag: string, i: number) => (
-                                                    <span key={i} className="px-3 py-1.5 rounded-lg bg-background text-header/80 text-[12px] font-bold border border-secondary/10">{tag}</span>
-                                                ))}
-                                            </div>
-                                            <div className="flex items-center gap-3">
-                                                <button className="px-5 py-2.5 rounded-lg border border-secondary/30 text-header text-sm font-bold hover:bg-background transition-all">Manage Post</button>
-                                                <button 
-                                                    onClick={() => navigate(`/candidates?job=${encodeURIComponent(job.title)}`)}
-                                                    className="px-6 py-2.5 rounded-lg bg-primary text-white text-sm font-bold hover:bg-header transition-all shadow-md shadow-primary/10"
-                                                >
-                                                    View Candidates
-                                                </button>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                        ))}
-                    </div>
-
-                    {/* Pagination */}
-                    <div className="mt-12 flex justify-center items-center gap-4">
-                        <button className="px-4 py-2 flex items-center gap-2 rounded-lg border border-secondary/30 text-header font-bold hover:bg-surface transition-colors disabled:opacity-30" disabled>
-                            <span className="material-symbols-outlined text-lg">chevron_left</span> Previous
-                        </button>
-                        <div className="flex items-center gap-2">
-                            <button className="w-10 h-10 flex items-center justify-center rounded-lg bg-primary text-white font-bold shadow-md shadow-primary/20">1</button>
-                            <button className="w-10 h-10 flex items-center justify-center rounded-lg hover:bg-surface text-header font-bold transition-colors">2</button>
-                            <button className="w-10 h-10 flex items-center justify-center rounded-lg hover:bg-surface text-header font-bold transition-colors">3</button>
-                            <span className="px-2 text-secondary font-bold">...</span>
-                            <button className="w-10 h-10 flex items-center justify-center rounded-lg hover:bg-surface text-header font-bold transition-colors">12</button>
-                        </div>
-                        <button className="px-4 py-2 flex items-center gap-2 rounded-lg border border-secondary/30 text-header font-bold hover:bg-surface transition-colors">
-                            Next <span className="material-symbols-outlined text-lg">chevron_right</span>
-                        </button>
-                    </div>
-                </section>
-            </main>
-
-
-
-            {/* Post Job Modal */}
-            {isModalOpen && (
-                <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 animate-in fade-in duration-300 backdrop-blur-md">
-                    <div className="absolute inset-0 bg-slate-900/40" onClick={() => setIsModalOpen(false)}></div>
-                    <div className="relative w-full max-w-2xl bg-white rounded-[2rem] shadow-2xl overflow-hidden animate-in zoom-in-95 duration-300">
-                        <div className="relative p-8 border-b border-slate-100 bg-slate-50/50 flex justify-between items-center">
-                            <div className="flex items-center gap-3">
-                                <div className="w-10 h-10 bg-primary rounded-xl flex items-center justify-center text-white shadow-lg shadow-primary/20">
-                                    <span className="material-symbols-outlined">rocket_launch</span>
+                                <div className={`w-9 h-9 rounded-lg bg-${s.color}-50 flex items-center justify-center`}>
+                                    <s.icon className={`w-[18px] h-[18px] text-${s.color}-600`} />
                                 </div>
                                 <div>
-                                    <h2 className="text-xl font-bold text-slate-800">Launch AI Sourcing Pipeline</h2>
-                                    <p className="text-xs text-slate-500 font-medium tracking-tight">Post to LinkedIn, Indeed & NEXUS Network</p>
+                                    <p className="text-xl font-semibold text-txt-primary">{s.value}</p>
+                                    <p className="text-xs text-txt-muted font-medium">{s.label}</p>
                                 </div>
                             </div>
-                            <button onClick={() => setIsModalOpen(false)} className="w-8 h-8 rounded-full hover:bg-slate-200 flex items-center justify-center text-slate-400 transition-colors">
-                                <span className="material-symbols-outlined text-xl">close</span>
-                            </button>
                         </div>
+                    ))}
+                </div>
+            </section>
 
-                        <form onSubmit={handleSubmit} className="relative p-8 space-y-6 max-h-[70vh] overflow-y-auto custom-scrollbar">
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                                <div className="space-y-2">
-                                    <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest pl-1">Job Title / Position</label>
-                                    <input 
-                                        required
-                                        name="title"
-                                        value={formData.title}
-                                        onChange={handleInputChange}
-                                        placeholder="e.g. Senior Frontend Engineer" 
-                                        className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-primary outline-none transition-all"
-                                    />
+            {/* Search & Filters */}
+            <section className="px-8 pt-5 pb-0">
+                <div className="flex items-center gap-4">
+                    <div className="relative flex-1 max-w-sm">
+                        <input 
+                            type="text" 
+                            placeholder="Search positions..." 
+                            className="w-full bg-white border border-bdr rounded-lg px-4 py-2.5 pl-10 text-sm text-txt-primary placeholder:text-txt-faint outline-none focus:border-primary transition-all shadow-sm"
+                            value={searchQuery}
+                            onChange={(e) => setSearchQuery(e.target.value)}
+                        />
+                        <Search className="w-4 h-4 text-txt-faint absolute left-3.5 top-1/2 -translate-y-1/2" />
+                    </div>
+                    <div className="flex items-center gap-1 bg-white rounded-lg border border-bdr p-1 shadow-sm overflow-x-auto">
+                        {['All', 'Engineering', 'Design', 'Data Science', 'Product'].map(dept => (
+                            <button 
+                                key={dept}
+                                className={`px-3 py-1.5 rounded-md text-xs font-medium transition-all whitespace-nowrap ${deptFilter === dept.toLowerCase() || (deptFilter === 'all' && dept === 'All') ? 'bg-primary/10 text-primary active' : 'text-txt-muted hover:bg-base'}`}
+                                onClick={() => setDeptFilter(dept.toLowerCase())}
+                            >
+                                {dept}
+                            </button>
+                        ))}
+                    </div>
+                </div>
+            </section>
+
+            {/* Positions List */}
+            <section className="px-8 pt-4 pb-8">
+                <div className="space-y-3">
+                    {loading ? (
+                        [1, 2, 3].map(i => <div key={i} className="h-32 bg-surface rounded-xl border border-bdr animate-pulse"></div>)
+                    ) : filteredPositions.length === 0 ? (
+                        <div className="py-16 text-center bg-surface rounded-xl border border-bdr border-dashed">
+                            <div className="w-16 h-16 rounded-full bg-slate-50 flex items-center justify-center mx-auto mb-4">
+                                <Search className="w-7 h-7 text-txt-faint" />
+                            </div>
+                            <p className="text-sm font-medium text-txt-secondary">No positions found</p>
+                        </div>
+                    ) : (
+                        filteredPositions.map(p => {
+                            const u = getUrgencyConfig(p.urgency);
+                            const totalPipeline = Object.values(p.pipeline).reduce((a, b) => a + (b as number), 0);
+                            const deptColors: Record<string, string> = {
+                                Engineering: 'bg-blue-50 text-blue-700 border-blue-200',
+                                Design: 'bg-pink-50 text-pink-700 border-pink-200',
+                                'Data Science': 'bg-violet-50 text-violet-700 border-violet-200',
+                                Product: 'bg-amber-50 text-amber-700 border-amber-200'
+                            };
+                            const deptColor = deptColors[p.department] || 'bg-slate-50 text-slate-700 border-slate-200';
+                            
+                            return (
+                                <div 
+                                    key={p.id} 
+                                    className="position-card bg-surface rounded-xl p-5 cursor-pointer border border-bdr transition-all hover:border-primary/40 hover:shadow-lg hover:shadow-primary/5 group"
+                                    onClick={() => openDetails(p)}
+                                >
+                                    <div className="flex items-start justify-between gap-4">
+                                        <div className="flex-1 min-w-0">
+                                            <div className="flex items-center gap-2 mb-1.5 flex-wrap">
+                                                <h4 className="text-base font-bold text-txt-primary group-hover:text-primary transition-colors">{p.title}</h4>
+                                                <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider border ${u.color}`}>
+                                                    {u.label}
+                                                </span>
+                                            </div>
+                                            <div className="flex items-center gap-3 mb-3 flex-wrap">
+                                                <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-semibold border ${deptColor}`}>
+                                                    {p.department}
+                                                </span>
+                                                <span className="text-xs text-txt-muted font-medium flex items-center gap-1">
+                                                    <MapPin className="w-3 h-3" />{p.location}
+                                                </span>
+                                                <span className="text-xs text-txt-muted font-medium flex items-center gap-1">
+                                                    <Clock className="w-3 h-3" />{p.type}
+                                                </span>
+                                            </div>
+                                            <p className="text-sm text-txt-muted leading-relaxed line-clamp-2 mb-4 font-medium">
+                                                {p.description}
+                                            </p>
+                                            <div className="flex items-center gap-4 text-[11px] text-txt-muted font-bold uppercase tracking-widest">
+                                                <span className="flex items-center gap-1.5"><DollarSign className="w-3.5 h-3.5 text-txt-faint" />{p.salary}</span>
+                                                <span className="flex items-center gap-1.5"><User className="w-3.5 h-3.5 text-txt-faint" />{p.manager}</span>
+                                                <span className="flex items-center gap-1.5"><Calendar className="w-3.5 h-3.5 text-txt-faint" />Posted {new Date(p.posted).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</span>
+                                            </div>
+                                        </div>
+                                        <div className="flex-shrink-0 w-48 border-l border-bdr-light pl-6">
+                                            <div className="flex items-center justify-between mb-3">
+                                                <span className="text-[11px] font-bold text-txt-muted uppercase tracking-widest">Pipeline</span>
+                                                <span className="text-sm font-black text-txt-primary">{totalPipeline}</span>
+                                            </div>
+                                            <div className="space-y-2">
+                                                {Object.entries(p.pipeline).map(([k, v]) => {
+                                                    const pct = totalPipeline ? Math.round((v as number) / totalPipeline * 100) : 0;
+                                                    const colors: Record<string, string> = {
+                                                        applied: 'bg-blue-500',
+                                                        screening: 'bg-purple-500',
+                                                        interview: 'bg-cyan-500',
+                                                        assessment: 'bg-amber-500',
+                                                        offer: 'bg-emerald-500'
+                                                    };
+                                                    if (v === 0) return null;
+                                                    return (
+                                                        <div key={k} className="flex items-center gap-2">
+                                                            <span className="text-[10px] font-bold text-txt-muted w-14 truncate capitalize tracking-tighter">{k}</span>
+                                                            <div className="flex-1 h-1.5 bg-slate-100 rounded-full overflow-hidden shadow-inner">
+                                                                <div className={`h-full ${colors[k]} rounded-full transition-all duration-700`} style={{ width: `${pct}%` }}></div>
+                                                            </div>
+                                                            <span className="text-[10px] font-black text-txt-secondary w-3 text-right">{v as number}</span>
+                                                        </div>
+                                                    );
+                                                })}
+                                            </div>
+                                        </div>
+                                    </div>
                                 </div>
+                            );
+                        })
+                    )}
+                </div>
+            </section>
+
+            {/* Create Position Modal */}
+            {isCreateModalOpen && (
+                <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+                    <div 
+                        className={`absolute inset-0 bg-slate-900/40 backdrop-blur-sm transition-opacity duration-300 ${isCreateModalVisible ? 'opacity-100' : 'opacity-0'}`} 
+                        onClick={closeCreateModal}
+                    ></div>
+                    <div 
+                        className={`relative w-full max-w-2xl bg-white rounded-[2.5rem] shadow-2xl overflow-hidden transform transition-all duration-300 ease-out ${isCreateModalVisible ? 'translate-y-0 opacity-100 scale-100' : 'translate-y-8 opacity-0 scale-95'}`}
+                    >
+                        <form onSubmit={handleSubmit} className="flex flex-col max-h-[90vh]">
+                            <div className="p-8 border-b border-bdr flex items-center justify-between bg-slate-50/50">
+                                <div>
+                                    <h3 className="text-2xl font-black text-txt-primary tracking-tight">Create New Position</h3>
+                                    <p className="text-xs text-txt-muted font-bold uppercase tracking-widest mt-1">Configure your recruitment requirements</p>
+                                </div>
+                                <button type="button" onClick={closeCreateModal} className="p-3 rounded-2xl hover:bg-white hover:shadow-md transition-all text-txt-muted">
+                                    <X className="w-6 h-6" />
+                                </button>
+                            </div>
+
+                            <div className="flex-1 overflow-y-auto p-8 space-y-6 custom-scrollbar">
+                                <div className="grid grid-cols-2 gap-6">
+                                    <div className="space-y-2">
+                                        <label className="text-[10px] font-black text-txt-muted uppercase tracking-[0.2em] ml-1">Job Title</label>
+                                        <div className="relative">
+                                            <input 
+                                                required
+                                                type="text"
+                                                placeholder="e.g. Senior Frontend Engineer"
+                                                className="w-full bg-base border border-bdr rounded-2xl px-5 py-4 text-sm font-bold text-txt-primary focus:border-primary focus:bg-white outline-none transition-all shadow-inner"
+                                                value={formData.title}
+                                                onChange={e => setFormData({...formData, title: e.target.value})}
+                                            />
+                                            <button 
+                                                type="button"
+                                                onClick={handleAutoFill}
+                                                disabled={isEnriching}
+                                                className="absolute right-3 top-1/2 -translate-y-1/2 p-2 rounded-xl bg-primary text-white shadow-lg shadow-primary/20 hover:scale-105 active:scale-95 transition-all disabled:opacity-50"
+                                                title="AI Autofill"
+                                            >
+                                                {isEnriching ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
+                                            </button>
+                                        </div>
+                                    </div>
+                                    <div className="space-y-2">
+                                        <label className="text-[10px] font-black text-txt-muted uppercase tracking-[0.2em] ml-1">Department</label>
+                                        <div className="relative">
+                                            <input 
+                                                type="text"
+                                                placeholder="e.g. Engineering"
+                                                className="w-full bg-base border border-bdr rounded-2xl px-5 py-4 pl-12 text-sm font-bold text-txt-primary focus:border-primary focus:bg-white outline-none transition-all shadow-inner"
+                                                value={formData.department}
+                                                onChange={e => setFormData({...formData, department: e.target.value})}
+                                            />
+                                            <Building className="w-4 h-4 text-txt-faint absolute left-5 top-1/2 -translate-y-1/2" />
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div className="grid grid-cols-2 gap-6">
+                                    <div className="space-y-2">
+                                        <label className="text-[10px] font-black text-txt-muted uppercase tracking-[0.2em] ml-1">Location</label>
+                                        <div className="relative">
+                                            <input 
+                                                type="text"
+                                                placeholder="e.g. San Francisco, CA"
+                                                className="w-full bg-base border border-bdr rounded-2xl px-5 py-4 pl-12 text-sm font-bold text-txt-primary focus:border-primary focus:bg-white outline-none transition-all shadow-inner"
+                                                value={formData.location}
+                                                onChange={e => setFormData({...formData, location: e.target.value})}
+                                            />
+                                            <MapPin className="w-4 h-4 text-txt-faint absolute left-5 top-1/2 -translate-y-1/2" />
+                                        </div>
+                                    </div>
+                                    <div className="space-y-2">
+                                        <label className="text-[10px] font-black text-txt-muted uppercase tracking-[0.2em] ml-1">Job Nature</label>
+                                        <div className="relative">
+                                            <select 
+                                                className="w-full bg-base border border-bdr rounded-2xl px-5 py-4 pl-12 text-sm font-bold text-txt-primary focus:border-primary focus:bg-white outline-none transition-all shadow-inner appearance-none cursor-pointer"
+                                                value={formData.nature}
+                                                onChange={e => setFormData({...formData, nature: e.target.value})}
+                                            >
+                                                <option value="online">Remote</option>
+                                                <option value="onsite">On-site</option>
+                                                <option value="hybrid">Hybrid</option>
+                                            </select>
+                                            <Globe className="w-4 h-4 text-txt-faint absolute left-5 top-1/2 -translate-y-1/2" />
+                                        </div>
+                                    </div>
+                                </div>
+
                                 <div className="space-y-2">
-                                    <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest pl-1">Company Name</label>
-                                    <input 
-                                        required
-                                        name="company"
-                                        value={formData.company}
-                                        onChange={handleInputChange}
-                                        placeholder="e.g. Nexus AI Corp" 
-                                        className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-primary outline-none transition-all"
-                                    />
+                                    <label className="text-[10px] font-black text-txt-muted uppercase tracking-[0.2em] ml-1">Salary Range</label>
+                                    <div className="relative">
+                                        <input 
+                                            type="text"
+                                            placeholder="e.g. $120k - $160k"
+                                            className="w-full bg-base border border-bdr rounded-2xl px-5 py-4 pl-12 text-sm font-bold text-txt-primary focus:border-primary focus:bg-white outline-none transition-all shadow-inner"
+                                            value={formData.salary}
+                                            onChange={e => setFormData({...formData, salary: e.target.value})}
+                                        />
+                                        <DollarSign className="w-4 h-4 text-txt-faint absolute left-5 top-1/2 -translate-y-1/2" />
+                                    </div>
+                                    <p className="text-[9px] text-txt-muted font-medium italic ml-1">If empty, AI will estimate based on market rates.</p>
+                                </div>
+
+                                <div className="space-y-2">
+                                    <label className="text-[10px] font-black text-txt-muted uppercase tracking-[0.2em] ml-1">Job Description</label>
+                                    <textarea 
+                                        rows={4}
+                                        placeholder="Describe the role, responsibilities, and key requirements..."
+                                        className="w-full bg-base border border-bdr rounded-2xl px-5 py-4 text-sm font-medium text-txt-primary focus:border-primary focus:bg-white outline-none transition-all shadow-inner resize-none"
+                                        value={formData.description}
+                                        onChange={e => setFormData({...formData, description: e.target.value})}
+                                    ></textarea>
                                 </div>
                             </div>
 
-                            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                                <div className="space-y-2">
-                                    <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest pl-1">Salary Range</label>
-                                    <input 
-                                        name="salary"
-                                        value={formData.salary}
-                                        onChange={handleInputChange}
-                                        placeholder="e.g. $120k - $160k" 
-                                        className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-primary outline-none transition-all"
-                                    />
-                                </div>
-                                <div className="space-y-2">
-                                    <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest pl-1">Time per Week</label>
-                                    <input 
-                                        name="timePerWeek"
-                                        value={formData.timePerWeek}
-                                        onChange={handleInputChange}
-                                        placeholder="e.g. 40 hrs" 
-                                        className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-primary outline-none transition-all"
-                                    />
-                                </div>
-                                <div className="space-y-2">
-                                    <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest pl-1">Nature</label>
-                                    <select 
-                                        name="nature"
-                                        value={formData.nature}
-                                        onChange={handleInputChange}
-                                        className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-primary outline-none transition-all appearance-none"
-                                    >
-                                        <option value="onsite">Onsite</option>
-                                        <option value="online">Online / Remote</option>
-                                        <option value="hybrid">Hybrid</option>
-                                    </select>
-                                </div>
-                            </div>
-
-                            <div className="space-y-2">
-                                <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest pl-1">Requirements</label>
-                                <textarea 
-                                    name="requirements"
-                                    value={formData.requirements}
-                                    onChange={handleInputChange}
-                                    rows={2}
-                                    placeholder="Key requirements..." 
-                                    className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-primary outline-none transition-all"
-                                />
-                            </div>
-
-                            <div className="space-y-2">
-                                <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest pl-1">Job Description</label>
-                                <textarea 
-                                    name="description"
-                                    value={formData.description}
-                                    onChange={handleInputChange}
-                                    rows={3}
-                                    placeholder="Details..." 
-                                    className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-primary outline-none transition-all"
-                                />
-                            </div>
-
-                            <div className="space-y-2">
-                                <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest pl-1">Skills & Tags</label>
-                                <input 
-                                    name="tags"
-                                    value={formData.tags}
-                                    onChange={handleInputChange}
-                                    placeholder="React, AI, Python" 
-                                    className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-primary outline-none transition-all"
-                                />
+                            <div className="p-8 border-t border-bdr bg-slate-50/50 flex items-center gap-4">
+                                <button 
+                                    type="button"
+                                    onClick={closeCreateModal}
+                                    className="px-8 py-4 bg-white hover:bg-elevated text-txt-primary font-bold rounded-2xl border border-bdr transition-all"
+                                >
+                                    Cancel
+                                </button>
+                                <button 
+                                    type="submit"
+                                    disabled={isSubmitting}
+                                    className="flex-1 py-4 bg-primary hover:bg-primary-dark text-white font-black rounded-2xl transition-all shadow-xl shadow-primary/20 flex items-center justify-center gap-3 active:scale-[0.98] disabled:opacity-70"
+                                >
+                                    {isSubmitting ? (
+                                        <>
+                                            <Loader2 className="w-5 h-5 animate-spin" />
+                                            Publishing...
+                                        </>
+                                    ) : (
+                                        <>
+                                            <Send className="w-5 h-5" />
+                                            Post Position
+                                        </>
+                                    )}
+                                </button>
                             </div>
                         </form>
+                    </div>
+                </div>
+            )}
 
-                        <div className="p-8 border-t border-slate-100 bg-slate-50/50 flex gap-4">
-                            <button onClick={() => setIsModalOpen(false)} className="flex-1 py-3 border border-slate-200 text-slate-600 font-bold rounded-xl text-sm hover:bg-slate-100 transition-all">Cancel</button>
+            {/* Detail Modal */}
+            {isModalOpen && selectedPosition && (
+                <div className="fixed inset-0 z-[100]">
+                    <div 
+                        className={`absolute inset-0 bg-black/30 backdrop-blur-sm transition-opacity duration-300 ${isModalVisible ? 'opacity-100' : 'opacity-0'}`} 
+                        onClick={closeModal}
+                    ></div>
+                    <div 
+                        className={`absolute right-0 top-0 bottom-0 w-[540px] bg-white border-l border-bdr overflow-y-auto transform transition-transform duration-300 ease-out shadow-2xl flex flex-col ${isModalVisible ? 'translate-x-0' : 'translate-x-full'}`}
+                    >
+                        <div className="p-8">
+                            <div className="flex items-center justify-between mb-8">
+                                <h3 className="text-xl font-bold text-txt-primary">Position Details</h3>
+                                <button onClick={closeModal} className="p-2 rounded-xl hover:bg-elevated text-txt-muted hover:text-txt-secondary transition-all">
+                                    <X className="w-6 h-6" />
+                                </button>
+                            </div>
+
+                            <div className="mb-8">
+                                <div className="flex items-center gap-2 mb-3">
+                                    <h3 className="text-2xl font-black text-txt-primary leading-tight">{selectedPosition.title}</h3>
+                                    <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider border ${getUrgencyConfig(selectedPosition.urgency).color}`}>
+                                        {getUrgencyConfig(selectedPosition.urgency).label}
+                                    </span>
+                                </div>
+                                <div className="flex items-center gap-3 flex-wrap">
+                                    <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-primary/10 text-primary border border-primary/20">
+                                        {selectedPosition.department}
+                                    </span>
+                                    <span className="text-sm text-txt-muted font-bold flex items-center gap-1.5">
+                                        <MapPin className="w-4 h-4 text-txt-faint" />{selectedPosition.location}
+                                    </span>
+                                    <span className="text-sm text-txt-muted font-bold flex items-center gap-1.5">
+                                        <Briefcase className="w-4 h-4 text-txt-faint" />{selectedPosition.type}
+                                    </span>
+                                </div>
+                            </div>
+
+                            <div className="grid grid-cols-3 gap-3 mb-8">
+                                <div className="bg-slate-50 rounded-2xl p-4 text-center border border-bdr-light shadow-sm">
+                                    <p className="text-[10px] font-bold text-txt-muted uppercase tracking-widest mb-1">Salary Range</p>
+                                    <p className="text-sm font-black text-txt-primary">{selectedPosition.salary}</p>
+                                </div>
+                                <div className="bg-slate-50 rounded-2xl p-4 text-center border border-bdr-light shadow-sm">
+                                    <p className="text-[10px] font-bold text-txt-muted uppercase tracking-widest mb-1">Applicants</p>
+                                    <p className="text-lg font-black text-txt-primary">{selectedPosition.applicants}</p>
+                                </div>
+                                <div className="bg-slate-50 rounded-2xl p-4 text-center border border-bdr-light shadow-sm">
+                                    <p className="text-[10px] font-bold text-txt-muted uppercase tracking-widest mb-1">Days Open</p>
+                                    <p className="text-lg font-black text-txt-primary">14d</p>
+                                </div>
+                            </div>
+
+                            <div className="mb-8">
+                                <h4 className="text-[10px] font-black text-txt-muted uppercase tracking-[0.2em] mb-3">Job Description</h4>
+                                <div className="bg-white border border-bdr-light rounded-2xl p-5 shadow-sm">
+                                    <p className="text-sm text-txt-secondary leading-relaxed font-medium">
+                                        {selectedPosition.description}
+                                    </p>
+                                </div>
+                            </div>
+
+                            <div className="mb-8">
+                                <h4 className="text-[10px] font-black text-txt-muted uppercase tracking-[0.2em] mb-3">Hiring Manager</h4>
+                                <div className="flex items-center gap-3 bg-white rounded-2xl p-4 border border-bdr-light shadow-sm">
+                                    <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-slate-700 to-slate-900 flex items-center justify-center text-xs font-bold text-white shadow-lg">
+                                        {selectedPosition.manager.split(' ').map(n => n[0]).join('')}
+                                    </div>
+                                    <div>
+                                        <p className="text-base font-bold text-txt-primary">{selectedPosition.manager}</p>
+                                        <p className="text-xs text-txt-muted font-bold uppercase tracking-widest">Decision Maker</p>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div className="mb-8">
+                                <h4 className="text-[10px] font-black text-txt-muted uppercase tracking-[0.2em] mb-3">Pipeline Overview</h4>
+                                <div className="space-y-4 bg-white border border-bdr-light rounded-2xl p-6 shadow-sm">
+                                    {Object.entries(selectedPosition.pipeline).map(([k, v]) => {
+                                        const total = Object.values(selectedPosition.pipeline).reduce((a, b) => a + (b as number), 0);
+                                        const pct = total ? Math.round((v as number) / total * 100) : 0;
+                                        const colors: Record<string, string> = {
+                                            applied: 'bg-blue-500',
+                                            screening: 'bg-purple-500',
+                                            interview: 'bg-cyan-500',
+                                            assessment: 'bg-amber-500',
+                                            offer: 'bg-emerald-500'
+                                        };
+                                        const labels: Record<string, string> = {
+                                            applied: 'New Applied',
+                                            screening: 'Initial Screening',
+                                            interview: 'In Interviews',
+                                            assessment: 'Tech Assessment',
+                                            offer: 'Offer Phase'
+                                        };
+                                        return (
+                                            <div key={k}>
+                                                <div className="flex items-center justify-between mb-2">
+                                                    <span className="text-xs font-bold text-txt-secondary uppercase tracking-tighter">{labels[k]}</span>
+                                                    <span className="text-xs font-black text-txt-primary">{v as number}</span>
+                                                </div>
+                                                <div className="h-2 bg-base rounded-full overflow-hidden shadow-inner">
+                                                    <div className={`h-full ${colors[k]} rounded-full transition-all duration-1000 ease-out`} style={{ width: `${pct}%` }}></div>
+                                                </div>
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            </div>
+                        </div>
+
+                        <div className="p-8 border-t border-bdr bg-slate-50/50 flex items-center gap-3">
+                            <button className="flex-1 py-4 bg-primary hover:bg-primary-dark text-white font-bold rounded-2xl transition-all shadow-lg shadow-primary/20 active:scale-95">Edit Position</button>
                             <button 
-                                onClick={handleSubmit}
-                                disabled={isSubmitting}
-                                className="flex-[2] bg-primary text-white font-bold py-3 rounded-xl text-sm hover:bg-header transition-all flex items-center justify-center gap-2 shadow-lg shadow-primary/20 disabled:opacity-50"
+                                onClick={() => navigate(`/candidates?job=${encodeURIComponent(selectedPosition.title)}`)}
+                                className="flex-1 py-4 bg-white hover:bg-elevated text-txt-primary font-bold rounded-2xl border border-bdr transition-all active:scale-95"
                             >
-                                {isSubmitting ? 'Optimizing Nodes...' : 'Launch Job Posting'}
+                                View Candidates
+                            </button>
+                            <button className="w-14 h-14 flex items-center justify-center rounded-2xl bg-white text-txt-muted border border-bdr hover:bg-red-50 hover:text-red-500 hover:border-red-200 transition-all shadow-sm">
+                                <Archive className="w-5 h-5" />
                             </button>
                         </div>
                     </div>
                 </div>
             )}
+
+            {/* Toasts */}
+            <div className="fixed top-4 right-4 z-[100] space-y-2 pointer-events-none">
+                {toasts.map(t => (
+                    <div key={t.id} className="toast flex items-center gap-3 px-4 py-3 rounded-xl border shadow-2xl bg-white min-w-[280px] pointer-events-auto">
+                        {t.type === 'success' && <CheckCircle className="w-5 h-5 text-emerald-500" />}
+                        {t.type === 'danger' && <AlertCircle className="w-5 h-5 text-red-500" />}
+                        {t.type === 'info' && <Info className="w-5 h-5 text-blue-500" />}
+                        <span className="text-sm font-semibold text-txt-primary">{t.msg}</span>
+                    </div>
+                ))}
+            </div>
         </div>
     );
 };

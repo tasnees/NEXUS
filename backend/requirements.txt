@@ -18,3 +18,4 @@ python-docx
 pandas
 puter-python-sdk>=0.0.18
 email-validator
+watchfiles

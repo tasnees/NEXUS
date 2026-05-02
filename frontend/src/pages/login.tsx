@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import { useAuth, type UserRole } from '../context/AuthContext';
+import { LayoutDashboard, Rocket, Shield, ArrowRight, User, Mail, Lock, Eye, EyeOff } from 'lucide-react';
 
 const Login: React.FC = () => {
     const navigate = useNavigate();
@@ -9,7 +10,6 @@ const Login: React.FC = () => {
     const [password, setPassword] = useState('');
     const [role, setRole] = useState<UserRole>('recruiter');
     const [showPassword, setShowPassword] = useState(false);
-    const [keepLoggedIn, setKeepLoggedIn] = useState(false);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
 
@@ -21,19 +21,13 @@ const Login: React.FC = () => {
         try {
             const response = await fetch('http://localhost:8001/api/v1/auth/login', {
                 method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
+                headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ email, password }),
             });
 
             const data = await response.json();
+            if (!response.ok) throw new Error(data.detail || 'Authentication failed');
 
-            if (!response.ok) {
-                throw new Error(data.detail || 'Authentication failed');
-            }
-
-            console.log('Login success:', data);
             login(data.role || role); 
             navigate('/dashboard');
         } catch (err) {
@@ -44,212 +38,146 @@ const Login: React.FC = () => {
     };
 
     return (
-        <div className="flex w-full min-h-screen bg-[var(--off-white)] dark:bg-[var(--navy-deep)] text-slate-800 dark:text-slate-200">
-            {/* Left Side - Image & Branding */}
-            <div className="hidden lg:flex lg:w-3/5 relative overflow-hidden items-center justify-center">
-                <img 
-                    alt="Modern Office Environment" 
-                    className="absolute inset-0 w-full h-full object-cover" 
-                    src="https://lh3.googleusercontent.com/aida-public/AB6AXuAS1LU5oZTxG7I7t0DmB-8EOBSR3UpzJQj72fbLmLtCx_PWWP1MuZz_H8gQudqk0TSJsffER4YB3C65NHLJ9JrPeg_z_otmaQ9430REmNUaXptLak9v1NZrPlCLt8MNR7agB9zCQPyTGgYgP-Hk-vbbW1qzzZmST5fcYhh0W7oeg5jmB6xP_nOABifG36v7kAn10kXoaxQ7Jlfbb4pPG9RDheYH02KF1PIsbcHTseM5mT6dOJvZ6chyDMnl3aQqdRd9HpPtIyJCZx4i"
-                />
-                <div className="absolute inset-0 bg-gradient-to-br from-navy-deep/90 via-navy-dark/80 to-primary/40"></div>
-                <div className="relative z-10 w-full max-w-2xl px-12">
-                    <div className="mb-12">
-                        <div className="inline-flex items-center space-x-2 bg-white/10 backdrop-blur-md px-4 py-2 rounded-full border border-white/20 mb-6">
-                            <span className="material-symbols-outlined text-accent text-sm">verified_user</span>
-                            <span className="text-xs font-semibold uppercase tracking-widest text-white">Enterprise AI Recruitment</span>
+        <div className="bg-[#f6fafe] min-h-screen flex items-center justify-center p-4 lg:p-8 antialiased font-sans">
+            <div className="w-full max-w-6xl bg-white rounded-[2.5rem] shadow-[0_20px_60px_rgb(0,0,0,0.08)] overflow-hidden flex flex-col lg:flex-row min-h-[700px] border border-slate-100">
+                
+                {/* Left Side: Hero */}
+                <div className="lg:w-1/2 bg-[#004869] relative overflow-hidden flex flex-col p-8 lg:p-16 text-white shrink-0">
+                    <div className="absolute top-0 right-0 w-96 h-96 bg-[#712ae2] filter blur-[120px] opacity-20 -mr-48 -mt-48 rounded-full"></div>
+                    <div className="absolute bottom-0 left-0 w-80 h-80 bg-[#003d9b] filter blur-[100px] opacity-20 -ml-40 -mb-40 rounded-full"></div>
+                    
+                    <div className="relative z-10 flex items-center gap-3 mb-16 lg:mb-24">
+                        <div className="w-11 h-11 bg-white/20 backdrop-blur-md rounded-xl flex items-center justify-center border border-white/10">
+                            <LayoutDashboard className="text-white" size={24} />
                         </div>
-                        <h1 className="text-6xl font-bold text-white mb-6 leading-tight">
-                            Human talent, <span className="text-accent">augmented</span> by intelligence.
+                        <span className="text-2xl font-bold tracking-tight text-white">HireSync AI</span>
+                    </div>
+
+                    <div className="relative z-10 flex-1 flex flex-col justify-center">
+                        <div className="inline-flex items-center gap-2 px-3 py-1 bg-white/10 backdrop-blur-sm rounded-full text-[10px] font-bold uppercase tracking-widest mb-6 w-fit border border-white/10 text-white">
+                            <Shield size={14} className="fill-white/20" />
+                            Secure Enterprise Access
+                        </div>
+                        <h1 className="text-4xl lg:text-5xl font-bold mb-6 leading-[1.1] tracking-tight text-white">
+                            Human talent, <br/><span className="text-[#c9e6ff]">augmented by AI.</span>
                         </h1>
-                        <p className="text-xl text-slate-300 max-w-lg">
+                        <p className="text-lg text-[#c9e6ff]/80 mb-10 leading-relaxed max-w-md">
                             Bridge the gap between potential and performance with our automated assessment ecosystem.
                         </p>
-                    </div>
-                    <div className="grid grid-cols-2 gap-4">
-                        <div className="bg-white/5 backdrop-blur-xl border border-white/10 p-6 rounded-xl">
-                            <div className="flex items-center space-x-3 mb-4">
-                                <div className="w-10 h-10 rounded-full bg-primary/30 flex items-center justify-center">
-                                    <span className="material-symbols-outlined text-white">groups</span>
+
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                            <div className="bg-white/5 backdrop-blur-xl border border-white/10 p-5 rounded-2xl group hover:bg-white/10 transition-all">
+                                <div className="w-8 h-8 rounded-lg bg-[#003d9b]/40 flex items-center justify-center mb-3">
+                                    <Rocket size={16} className="text-white" />
                                 </div>
-                                <span className="text-white font-semibold">Diverse Sourcing</span>
+                                <h4 className="text-white font-bold text-sm mb-1">Smart Sourcing</h4>
+                                <p className="text-xs text-white/60 leading-relaxed">Discover elite talent from global networks.</p>
                             </div>
-                            <p className="text-slate-300 text-sm">Remove bias and discover elite talent from global professional networks.</p>
-                        </div>
-                        <div className="bg-white/5 backdrop-blur-xl border border-white/10 p-6 rounded-xl">
-                            <div className="flex items-center space-x-3 mb-4">
-                                <div className="w-10 h-10 rounded-full bg-primary/30 flex items-center justify-center">
-                                    <span className="material-symbols-outlined text-white">psychology</span>
+                            <div className="bg-white/5 backdrop-blur-xl border border-white/10 p-5 rounded-2xl group hover:bg-white/10 transition-all">
+                                <div className="w-8 h-8 rounded-lg bg-[#712ae2]/40 flex items-center justify-center mb-3">
+                                    <Shield size={16} className="text-white" />
                                 </div>
-                                <span className="text-white font-semibold">Smart Assessment</span>
+                                <h4 className="text-white font-bold text-sm mb-1">Bias Removal</h4>
+                                <p className="text-xs text-white/60 leading-relaxed">Automated screening for fair evaluations.</p>
                             </div>
-                            <p className="text-slate-300 text-sm">Validate technical skills through realistic, real-world work simulations.</p>
                         </div>
                     </div>
-                    <div className="mt-16 flex flex-col space-y-4">
-                        <p className="text-xs text-slate-400 font-bold tracking-widest uppercase">Powering Modern Workforces</p>
-                        <div className="flex space-x-10 items-center opacity-70">
-                            <div className="h-6 w-auto flex items-center text-white font-bold text-xl tracking-tighter italic">LUMINA</div>
-                            <div className="h-6 w-auto flex items-center text-white font-bold text-xl tracking-tighter italic">NEXUS</div>
-                            <div className="h-6 w-auto flex items-center text-white font-bold text-xl tracking-tighter italic">APEX</div>
-                            <div className="h-6 w-auto flex items-center text-white font-bold text-xl tracking-tighter italic">STRATOS</div>
-                        </div>
+
+                    <div className="relative z-10 pt-12 flex items-center gap-4 opacity-40 grayscale contrast-125">
+                        <span className="font-bold text-lg text-white italic tracking-tighter">LUMINA</span>
+                        <span className="font-bold text-lg text-white italic tracking-tighter">NEXUS</span>
+                        <span className="font-bold text-lg text-white italic tracking-tighter">APEX</span>
                     </div>
                 </div>
-            </div>
 
-            {/* Right Side - Login Form */}
-            <div className="w-full lg:w-2/5 flex flex-col justify-center px-8 sm:px-12 lg:px-20 py-12 bg-[var(--off-white)] dark:bg-[var(--navy-deep)]">
-                <div className="max-w-md w-full mx-auto">
-                    <div className="lg:hidden flex items-center mb-8">
-                        <div className="w-10 h-10 bg-primary rounded flex items-center justify-center mr-3 shadow-lg">
-                            <span className="material-symbols-outlined text-white">diversity_3</span>
+                {/* Right Side: Login Form */}
+                <div className="flex-1 flex flex-col items-center justify-center p-8 lg:p-16 bg-white min-w-0">
+                    <div className="w-full max-w-md mx-auto">
+                        <div className="mb-10">
+                            <h2 className="text-3xl font-bold text-[#171c1f] mb-2 tracking-tight">Welcome back</h2>
+                            <p className="text-sm text-slate-500 font-medium">Sign in to your recruitment dashboard.</p>
                         </div>
-                        <span className="text-2xl font-bold tracking-tighter text-navy-deep dark:text-off-white">RECRUIT.AI</span>
-                    </div>
-                    <div className="mb-10">
-                        <h2 className="text-3xl font-bold mb-2 text-navy-deep dark:text-off-white">Welcome back</h2>
-                        <p className="text-slate-600 dark:text-accent mb-6">Access your automated recruitment dashboard.</p>
-                        
+
                         {error && (
-                            <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg flex items-center gap-3 text-red-700 text-sm animate-pulse">
-                                <span className="material-symbols-outlined">error</span>
+                            <div className="mb-6 p-4 bg-red-50 text-red-700 rounded-2xl flex items-center gap-3 text-sm animate-fade-in border border-red-100">
+                                <Shield size={18} className="shrink-0" />
                                 <p className="font-semibold">{error}</p>
                             </div>
                         )}
-                    </div>
-                    <div className="flex p-1 bg-slate-200 dark:bg-navy-dark rounded-lg mb-8">
-                        <button 
-                            onClick={() => navigate('/login')}
-                            className="flex-1 py-2.5 text-sm font-bold rounded-md bg-white dark:bg-primary shadow-md text-navy-deep dark:text-white transition-all"
-                        >
-                            Login
-                        </button>
-                        <button 
-                            onClick={() => navigate('/signup')}
-                            className="flex-1 py-2.5 text-sm font-semibold rounded-md text-slate-500 dark:text-accent hover:text-navy-deep dark:hover:text-off-white transition-all"
-                        >
-                            Sign Up
-                        </button>
-                    </div>
-                    
-                    <form onSubmit={handleLogin} className="space-y-5">
-                        <div>
-                            <label className="block text-sm font-bold mb-2 text-navy-dark dark:text-accent">Login As (Role)</label>
-                            <div className="relative group">
-                                <span className="absolute inset-y-0 left-0 pl-4 flex items-center text-slate-400 group-focus-within:text-primary transition-colors">
-                                    <span className="material-symbols-outlined text-xl">badge</span>
-                                </span>
-                                <select 
-                                    className="block w-full pl-12 pr-4 py-3.5 bg-white dark:bg-navy-dark border border-slate-300 dark:border-slate-700 rounded-xl focus:ring-2 focus:ring-primary focus:border-transparent outline-none transition-all text-navy-deep dark:text-off-white appearance-none cursor-pointer"
-                                    value={role || 'recruiter'}
-                                    onChange={(e) => setRole(e.target.value as UserRole)}
-                                >
-                                    <option value="recruiter">Recruiter / Talent Acquisition</option>
-                                    <option value="hiring_manager">Hiring Manager</option>
-                                    <option value="interviewer">Interviewer (Team Member)</option>
-                                    <option value="hr_admin">HR Manager / Admin</option>
-                                </select>
-                                <span className="absolute inset-y-0 right-0 pr-4 flex items-center text-slate-400 pointer-events-none">
-                                    <span className="material-symbols-outlined text-xl">expand_more</span>
-                                </span>
-                            </div>
-                        </div>
-                        <div>
-                            <label className="block text-sm font-bold mb-2 text-navy-dark dark:text-accent">Corporate Email</label>
-                            <div className="relative group">
-                                <span className="absolute inset-y-0 left-0 pl-4 flex items-center text-slate-400 group-focus-within:text-primary transition-colors">
-                                    <span className="material-symbols-outlined text-xl">alternate_email</span>
-                                </span>
-                                <input 
-                                    type="email" 
-                                    className="block w-full pl-12 pr-4 py-3.5 bg-white dark:bg-navy-dark border border-slate-300 dark:border-slate-700 rounded-xl focus:ring-2 focus:ring-primary focus:border-transparent outline-none transition-all placeholder:text-slate-400 text-navy-deep dark:text-off-white" 
-                                    placeholder="name@company.com"
-                                    value={email}
-                                    onChange={(e) => setEmail(e.target.value)}
-                                />
-                            </div>
-                        </div>
-                        <div>
-                            <div className="flex justify-between items-center mb-2">
-                                <label className="block text-sm font-bold text-navy-dark dark:text-accent">Password</label>
-                                <a href="#" className="text-xs font-bold text-primary dark:text-accent hover:underline">Forgot Credentials?</a>
-                            </div>
-                            <div className="relative group">
-                                <span className="absolute inset-y-0 left-0 pl-4 flex items-center text-slate-400 group-focus-within:text-primary transition-colors">
-                                    <span className="material-symbols-outlined text-xl">key</span>
-                                </span>
-                                <input 
-                                    type={showPassword ? "text" : "password"} 
-                                    className="block w-full pl-12 pr-12 py-3.5 bg-white dark:bg-navy-dark border border-slate-300 dark:border-slate-700 rounded-xl focus:ring-2 focus:ring-primary focus:border-transparent outline-none transition-all placeholder:text-slate-400 text-navy-deep dark:text-off-white" 
-                                    placeholder="••••••••"
-                                    value={password}
-                                    onChange={(e) => setPassword(e.target.value)}
-                                    maxLength={72}
-                                />
-                                <button 
-                                    type="button" 
-                                    className="absolute inset-y-0 right-0 pr-4 flex items-center text-slate-400 hover:text-primary transition-colors"
-                                    onClick={() => setShowPassword(!showPassword)}
-                                >
-                                    <span className="material-symbols-outlined text-xl">visibility</span>
-                                </button>
-                            </div>
-                        </div>
-                        <div className="flex items-center">
-                            <input 
-                                id="remember" 
-                                type="checkbox" 
-                                className="w-4 h-4 rounded border-slate-300 dark:border-slate-700 text-primary focus:ring-primary bg-white dark:bg-navy-dark"
-                                checked={keepLoggedIn}
-                                onChange={(e) => setKeepLoggedIn(e.target.checked)}
-                            />
-                            <label htmlFor="remember" className="ml-2 text-sm font-medium text-slate-600 dark:text-accent">Keep me logged in on this workstation</label>
-                        </div>
-                        <button 
-                            type="submit" 
-                            disabled={loading}
-                            className="w-full py-4 bg-primary hover:bg-navy-dark text-white font-bold rounded-xl shadow-xl shadow-primary/20 transition-all transform active:scale-[0.99] flex items-center justify-center space-x-2 disabled:opacity-70"
-                        >
-                            {loading ? (
-                                <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
-                            ) : (
-                                <>
-                                    <span>Sign In to Dashboard</span>
-                                    <span className="material-symbols-outlined text-lg">arrow_forward</span>
-                                </>
-                            )}
-                        </button>
-                    </form>
 
-                    <div className="relative my-8">
-                        <div className="absolute inset-0 flex items-center">
-                            <div className="w-full border-t border-slate-200 dark:border-slate-800"></div>
-                        </div>
-                        <div className="relative flex justify-center text-xs uppercase tracking-widest">
-                            <span className="bg-[var(--off-white)] dark:bg-[var(--navy-deep)] px-4 text-slate-400 font-bold">Secure SSO</span>
-                        </div>
-                    </div>
+                        <form onSubmit={handleLogin} className="space-y-5 w-full block">
+                            <div className="space-y-2">
+                                <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest pl-1">Sign in as</label>
+                                <div className="relative group">
+                                    <User className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300 group-focus-within:text-[#003d9b] transition-colors" size={18} />
+                                    <select 
+                                        className="w-full pl-12 pr-4 py-3.5 bg-slate-50/50 border border-slate-100 rounded-xl focus:bg-white focus:ring-4 focus:ring-[#003d9b]/5 focus:border-[#003d9b] outline-none transition-all text-sm font-medium appearance-none cursor-pointer"
+                                        value={role || 'recruiter'}
+                                        onChange={(e) => setRole(e.target.value as UserRole)}
+                                    >
+                                        <option value="recruiter">Recruiter / Talent Acquisition</option>
+                                        <option value="hiring_manager">Hiring Manager</option>
+                                        <option value="interviewer">Interviewer</option>
+                                        <option value="hr_admin">HR Admin</option>
+                                    </select>
+                                </div>
+                            </div>
 
-                    <div className="grid grid-cols-2 gap-4">
-                        <button className="flex items-center justify-center space-x-3 py-3 border border-slate-300 dark:border-slate-700 rounded-xl hover:bg-white dark:hover:bg-navy-dark transition-all shadow-sm">
-                            <img alt="Google" className="w-5 h-5" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBIMxmuaAuiAaYorcHvylEhYBmUKk2sk34s1dINBwWYLx2jmJ2NCq5wMAvXo_LcXS_hUv3BlUGJ6HdbXv4QhA4WX9ZgydDiiuJDcgJTG-2OfHTQVA-QHCb8HBMHsC9TxC8evFxem9vWgV1aP1ftN16OMoMeVH_wGa4SG6F558H0RM-XjjQ0yJ32-GqwVQL5WgEzWK4Mi2NupF4JCnH6mZ1jYe96ou8AyAINoLfoCeeE2xFM-Mz85SE1uo4CLUjaRwsnWl-tqSqNLe1L"/>
-                            <span className="text-sm font-bold text-navy-deep dark:text-off-white">Google</span>
-                        </button>
-                        <button className="flex items-center justify-center space-x-3 py-3 border border-slate-300 dark:border-slate-700 rounded-xl hover:bg-white dark:hover:bg-navy-dark transition-all shadow-sm">
-                            <svg className="w-5 h-5 text-[#0A66C2] fill-current" viewBox="0 0 24 24"><path d="M19 0h-14c-2.761 0-5 2.239-5 5v14c0 2.761 2.239 5 5 5h14c2.762 0 5-2.239 5-5v-14c0-2.761-2.238-5-5-5zm-11 19h-3v-11h3v11zm-1.5-12.268c-.966 0-1.75-.79-1.75-1.764s.784-1.764 1.75-1.764 1.75.79 1.75 1.764-.783 1.764-1.75 1.764zm13.5 12.268h-3v-5.604c0-3.368-4-3.113-4 0v5.604h-3v-11h3v1.765c1.396-2.586 7-2.777 7 2.476v6.759z"></path></svg>
-                            <span className="text-sm font-bold text-navy-deep dark:text-off-white">LinkedIn</span>
-                        </button>
-                    </div>
+                            <div className="space-y-2">
+                                <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest pl-1">Corporate Email</label>
+                                <div className="relative group">
+                                    <Mail className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300 group-focus-within:text-[#003d9b] transition-colors" size={18} />
+                                    <input 
+                                        className="w-full pl-12 pr-4 py-3.5 bg-slate-50/50 border border-slate-100 rounded-xl focus:bg-white focus:ring-4 focus:ring-[#003d9b]/5 focus:border-[#003d9b] outline-none transition-all text-sm font-medium" 
+                                        placeholder="name@company.com" required type="email"
+                                        value={email} onChange={(e) => setEmail(e.target.value)}
+                                    />
+                                </div>
+                            </div>
 
-                    <div className="mt-10 p-6 bg-slate-100 dark:bg-navy-dark/30 rounded-xl border border-slate-200 dark:border-slate-800">
-                        <p className="text-center text-[10px] text-slate-500 dark:text-slate-400 leading-relaxed uppercase tracking-tighter font-bold">
-                            Professional environment detected. Data is encrypted using AES-256 standards. 
-                            <br/>
-                            By logging in, you agree to our 
-                            <a href="#" className="text-primary underline">Client Agreement</a> &amp; 
-                            <a href="#" className="text-primary underline">Security Policy</a>.
-                        </p>
+                            <div className="space-y-2">
+                                <div className="flex justify-between items-center px-1">
+                                    <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Password</label>
+                                    <a href="#" className="text-[10px] font-bold text-[#003d9b] hover:underline">Forgot?</a>
+                                </div>
+                                <div className="relative group">
+                                    <Lock className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300 group-focus-within:text-[#003d9b] transition-colors" size={18} />
+                                    <input 
+                                        className="w-full pl-12 pr-12 py-3.5 bg-slate-50/50 border border-slate-100 rounded-xl focus:bg-white focus:ring-4 focus:ring-[#003d9b]/5 focus:border-[#003d9b] outline-none transition-all text-sm font-medium" 
+                                        placeholder="••••••••" required type={showPassword ? "text" : "password"}
+                                        value={password} onChange={(e) => setPassword(e.target.value)}
+                                    />
+                                    <button 
+                                        type="button" 
+                                        className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-300 hover:text-[#003d9b] transition-colors"
+                                        onClick={() => setShowPassword(!showPassword)}
+                                    >
+                                        {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                                    </button>
+                                </div>
+                            </div>
+
+                            <button 
+                                className="w-full bg-[#003d9b] hover:bg-[#0052cc] text-white font-bold py-4 px-6 rounded-2xl shadow-xl shadow-[#003d9b]/20 transition-all active:scale-[0.98] flex items-center justify-center gap-3 mt-4 disabled:opacity-70" 
+                                type="submit" disabled={loading}
+                            >
+                                {loading ? (
+                                    <div className="animate-spin rounded-full h-5 w-5 border-2 border-white/30 border-t-white"></div>
+                                ) : (
+                                    <>
+                                        <span>Sign In to Dashboard</span>
+                                        <ArrowRight size={20} />
+                                    </>
+                                )}
+                            </button>
+                        </form>
+
+                        <div className="text-center mt-10">
+                            <p className="text-sm text-slate-500 font-medium">
+                                New to HireSync? 
+                                <Link className="text-[#003d9b] font-bold hover:underline ml-1.5" to="/signup">Create account</Link>
+                            </p>
+                        </div>
                     </div>
                 </div>
             </div>

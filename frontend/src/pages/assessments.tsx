@@ -1,859 +1,407 @@
 import React, { useState, useEffect } from 'react';
+import { ClipboardCheck, Plus, Search, X, Sparkles, Edit3, Trash2, Eye, ChevronRight, Loader, Briefcase, Code2, Brain, Zap, AlertCircle, CheckCircle2, Send, Calendar } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 
+const API = 'http://localhost:8001/api/v1';
 
-// --- Types ---
+interface Assessment { id: number; title: string; duration: string; difficulty: string; focus: string[]; description: string; steps: string[]; required_format: string; grading_threshold: number; auto_reject: number; evaluation_nodes: string[]; job_id: number; }
+interface Job { id: number; title: string; tags: string[]; }
 
-interface Assessment {
-    id: string;
-    title: string;
-    duration: string;
-    difficulty: 'Easy' | 'Intermediate' | 'Expert';
-    focus: string[];
-    description: string;
-}
-
-interface JobGroup {
-    jobId: number;
-    jobTitle: string;
-    assessments: Assessment[];
-}
-
-
-
-// --- Sub-Components ---
-
-const AssessmentCard: React.FC<{ assessment: Assessment; onLaunch: () => void; onSchedule: () => void; onEdit: () => void; onDelete: () => void; onViewSubmissions: () => void }> = ({ assessment, onLaunch, onSchedule, onEdit, onDelete, onViewSubmissions }) => (
-    <div className="bg-white p-6 rounded-2xl border border-accent/10 shadow-soft hover:shadow-xl hover:-translate-y-1 transition-all group flex flex-col justify-between h-full">
-        <div>
-            <div className="flex justify-between items-start mb-4">
-                <div className={`px-3 py-1 rounded-lg text-[10px] font-black uppercase tracking-widest border transition-colors ${
-                    assessment.difficulty === 'Expert' ? 'bg-red-50 text-red-600 border-red-100' :
-                    assessment.difficulty === 'Intermediate' ? 'bg-amber-50 text-amber-600 border-amber-100' :
-                    'bg-emerald-50 text-emerald-600 border-emerald-100'
-                }`}>
-                    {assessment.difficulty} Challenge
-                </div>
-                <div className="flex items-center gap-2">
-                    <button 
-                        onClick={onDelete}
-                        className="w-8 h-8 rounded-full bg-slate-50 flex items-center justify-center text-slate-400 hover:text-red-500 transition-colors"
-                        title="Delete Assessment"
-                    >
-                        <span className="material-symbols-outlined text-sm">delete</span>
-                    </button>
-                    <button 
-                        onClick={onEdit}
-                        className="w-8 h-8 rounded-full bg-slate-50 flex items-center justify-center text-slate-400 hover:text-primary transition-colors"
-                        title="Edit Assessment"
-                    >
-                        <span className="material-symbols-outlined text-sm">edit</span>
-                    </button>
-                </div>
-            </div>
-            <h4 className="text-xl font-bold text-slate-800 mb-2 group-hover:text-primary transition-colors">{assessment.title}</h4>
-            <p className="text-xs text-slate-500 font-medium leading-relaxed mb-6 line-clamp-2">{assessment.description}</p>
-            
-            <div className="flex flex-wrap gap-2 mb-6">
-                {assessment.focus.map(skill => (
-                    <span key={skill} className="px-2 py-1 bg-slate-50 text-slate-600 rounded-md text-[9px] font-bold border border-slate-100 flex items-center gap-1">
-                        <span className="w-1 h-1 bg-slate-300 rounded-full"></span> {skill}
-                    </span>
-                ))}
-            </div>
-        </div>
-
-        <div className="flex gap-2">
-            <button 
-                onClick={onLaunch}
-                className="flex-1 py-3 bg-slate-800 text-white rounded-xl text-sm font-bold flex items-center justify-center gap-2 hover:bg-primary transition-all active:scale-95 group/btn shadow-lg shadow-slate-200"
-            >
-                <span className="material-symbols-outlined text-lg group-hover/btn:rotate-12 transition-transform">bolt</span>
-                Launch
-            </button>
-            <button 
-                onClick={onSchedule}
-                className="flex-1 py-3 bg-white border border-accent/20 text-slate-800 rounded-xl text-sm font-bold flex items-center justify-center gap-2 hover:bg-slate-50 transition-all active:scale-95 group/btn shadow-soft"
-            >
-                <span className="material-symbols-outlined text-lg group-hover/btn:scale-110 transition-transform">calendar_month</span>
-                Schedule
-            </button>
-            <button 
-                onClick={onViewSubmissions}
-                className="w-12 py-3 bg-slate-50 border border-slate-100 text-slate-400 rounded-xl flex items-center justify-center hover:bg-primary/5 hover:text-primary transition-all group/sub"
-                title="View Submissions"
-            >
-                <span className="material-symbols-outlined text-lg group-hover/sub:scale-110 transition-transform">visibility</span>
-            </button>
-        </div>
-    </div>
-);
-
-// --- View Component ---
+const DIFF_COLOR: Record<string,string> = { Expert:'bg-red-50 text-red-600 border-red-100', Intermediate:'bg-amber-50 text-amber-600 border-amber-100', Easy:'bg-emerald-50 text-emerald-600 border-emerald-100' };
+const FORMAT_ICON: Record<string,any> = { python: Code2, javascript: Code2, sql: Code2, default: Brain };
 
 const Assessments: React.FC = () => {
-    const [groups, setGroups] = useState<JobGroup[]>([]);
-    const [isModalOpen, setIsModalOpen] = useState(false);
-    const [isFilterModalOpen, setIsFilterModalOpen] = useState(false);
-    const [selection, setSelection] = useState<'manual' | 'ai' | null>(null);
-    const [isGenerating, setIsGenerating] = useState(false);
-    const [title, setTitle] = useState('');
-    const [targetJobId, setTargetJobId] = useState<number>(0);
-    const [targetJobName, setTargetJobName] = useState('');
-    const [description, setDescription] = useState('');
-    const [difficulty, setDifficulty] = useState<'Easy' | 'Intermediate' | 'Expert'>('Intermediate');
-    const [duration, setDuration] = useState('3 Hours');
-    const [editingId, setEditingId] = useState<string | null>(null);
-    const [viewingSubmissionsId, setViewingSubmissionsId] = useState<string | null>(null);
-    const [submissions, setSubmissions] = useState<any[]>([]);
-    const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
-    
-    // Dispatch Preview Modal State
-    const [previewModalOpen, setPreviewModalOpen] = useState(false);
-    const [matchingCandidates, setMatchingCandidates] = useState<any[]>([]);
-    const [previewMode, setPreviewMode] = useState<'launch' | 'schedule'>('launch');
-    const [activeAssessment, setActiveAssessment] = useState<Assessment | null>(null);
-    const [activeJobTitle, setActiveJobTitle] = useState('');
-    const [isEmailSending, setIsEmailSending] = useState(false);
+    const navigate = useNavigate();
+    const [assessments, setAssessments] = useState<Assessment[]>([]);
+    const [jobs, setJobs] = useState<Job[]>([]);
+    const [loading, setLoading] = useState(true);
+    const [search, setSearch] = useState('');
+    const [modal, setModal] = useState(false);
+    const [mode, setMode] = useState<'pick'|'manual'|'ai'>('pick');
+    const [submitting, setSubmitting] = useState(false);
+    const [detail, setDetail] = useState<Assessment|null>(null);
+    const [toasts, setToasts] = useState<{id:number,msg:string,type:string}[]>([]);
 
-    // Agent Config State
-    const [threshold, setThreshold] = useState(80);
-    const [autoReject, setAutoReject] = useState(true);
+    const [form, setForm] = useState({ title:'', difficulty:'Intermediate', language:'python', steps:'', topic:'', job_id:0 });
 
-    const fetchData = async () => {
+    const toast = (msg: string, type='success') => {
+        const id = Date.now();
+        setToasts(p => [...p, {id, msg, type}]);
+        setTimeout(() => setToasts(p => p.filter(t => t.id !== id)), 3500);
+    };
+
+    const fetchAll = async () => {
+        setLoading(true);
         try {
-            const [jobsRes, assRes] = await Promise.all([
-                fetch('http://localhost:8001/api/v1/jobs/'),
-                fetch('http://localhost:8001/api/v1/assessments/')
-            ]);
-            
-            if (jobsRes.ok && assRes.ok) {
-                const jobsData = await jobsRes.json();
-                const assData = await assRes.json();
-                
-                const newGroups: JobGroup[] = jobsData.map((job: any) => ({
-                    jobId: job.id,
-                    jobTitle: job.title,
-                    assessments: assData.filter((a: any) => a.job_id === job.id).map((a: any) => ({
-                        id: a.id.toString(),
+            const [jr, ar] = await Promise.all([fetch(`${API}/jobs/`), fetch(`${API}/assessments/`)]);
+            if (jr.ok) setJobs(await jr.json());
+            if (ar.ok) setAssessments(await ar.json());
+        } catch { toast('Failed to load data','danger'); }
+        finally { setLoading(false); }
+    };
+
+    useEffect(() => { fetchAll(); }, []);
+
+    const openModal = () => { setModal(true); setMode('pick'); setForm({ title:'', difficulty:'Intermediate', language:'python', steps:'', topic:'', job_id: jobs[0]?.id || 0 }); };
+    const closeModal = () => { setModal(false); setMode('pick'); };
+
+    const submitManual = async () => {
+        if (!form.title || !form.job_id) return toast('Title and job are required','danger');
+        setSubmitting(true);
+        try {
+            const res = await fetch(`${API}/assessments/`, {
+                method:'POST', headers:{'Content-Type':'application/json'},
+                body: JSON.stringify({ title: form.title, duration:'2 Hours', difficulty: form.difficulty, focus:[form.language, form.topic].filter(Boolean), description: form.topic || 'Complete the assessment task.', steps: form.steps.split('\n').filter(Boolean), required_format: form.language, grading_threshold:70, auto_reject:0, evaluation_nodes:[], job_id: form.job_id })
+            });
+            if (res.ok) { toast('Assessment created!'); closeModal(); fetchAll(); }
+            else toast('Failed to create','danger');
+        } catch { toast('Network error','danger'); }
+        finally { setSubmitting(false); }
+    };
+
+    const submitAI = async () => {
+        if (!form.job_id) return toast('Please select a job','danger');
+        setSubmitting(true);
+        toast('AI is generating your assessment...','info');
+        try {
+            const params = new URLSearchParams({ job_id: String(form.job_id), difficulty: form.difficulty, context: [form.topic, form.language !== 'python' ? `Language: ${form.language}` : ''].filter(Boolean).join('. ') });
+            const res = await fetch(`${API}/assessments/generate?${params}`, { method:'POST' });
+            if (res.ok) { toast('AI assessment generated!'); closeModal(); fetchAll(); }
+            else { const e = await res.json(); toast(e.detail || 'AI generation failed','danger'); }
+        } catch { toast('Network error','danger'); }
+        finally { setSubmitting(false); }
+    };
+
+    const deleteAssessment = async (id: number) => {
+        try {
+            await fetch(`${API}/assessments/${id}`, { method:'DELETE' });
+            toast('Deleted'); fetchAll();
+        } catch { toast('Delete failed','danger'); }
+    };
+
+    const launchAssessment = async (a: Assessment, job: Job) => {
+        toast('Sending assessment emails…', 'info');
+        try {
+            const res = await fetch(`${API}/emails/launch-assessment`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    job_name: job.title,
+                    assessment_details: {
+                        assessment_id: String(a.id),
                         title: a.title,
+                        description: a.description.replace(/#+/g,'').trim().slice(0,200),
                         duration: a.duration,
-                        difficulty: a.difficulty as any,
-                        focus: a.focus,
-                        description: a.description
-                    }))
-                }));
-                setGroups(newGroups);
-                if (jobsData.length > 0 && !targetJobId) {
-                    setTargetJobId(jobsData[0].id);
-                    setTargetJobName(jobsData[0].title);
-                }
-            }
-        } catch (err) {
-            console.error('Failed to fetch dynamic data:', err);
-        }
+                        difficulty: a.difficulty,
+                        focus_areas: a.focus
+                    }
+                })
+            });
+            const data = await res.json();
+            if (res.ok && data.status === 'success') toast(data.message, 'success');
+            else toast(data.message || 'Launch failed', 'danger');
+        } catch { toast('Network error during launch', 'danger'); }
     };
 
-    useEffect(() => {
-        fetchData();
-    }, []);
-
-    useEffect(() => {
-        if (toast) {
-            const timer = setTimeout(() => setToast(null), 5000);
-            return () => clearTimeout(timer);
-        }
-    }, [toast]);
-
-    const handleLaunchAssessment = async (jobTitle: string, assessment: Assessment) => {
-        setActiveJobTitle(jobTitle);
-        setActiveAssessment(assessment);
-        setPreviewMode('launch');
-        fetchMatching(jobTitle);
-    };
-
-    const handleScheduleInterview = async (jobTitle: string, assessment: Assessment) => {
-        setActiveJobTitle(jobTitle);
-        setActiveAssessment(assessment);
-        setPreviewMode('schedule');
-        fetchMatching(jobTitle);
-    };
-
-    const fetchMatching = async (jobTitle: string) => {
-        setPreviewModalOpen(true);
-        setMatchingCandidates([]);
+    const scheduleAssessment = async (a: Assessment, job: Job) => {
+        toast('Sending scheduling emails…', 'info');
         try {
-            const res = await fetch(`http://localhost:8001/api/v1/emails/matching-candidates?job_name=${encodeURIComponent(jobTitle)}`);
-            if (res.ok) {
-                setMatchingCandidates(await res.json());
-            }
-        } catch (err) {
-            console.error("Failed to fetch matches:", err);
-        }
-    };
-
-    const handleFinalDispatch = async () => {
-        if (!activeAssessment || !activeJobTitle) return;
-        setIsEmailSending(true);
-        try {
-            const url = previewMode === 'launch' ? '/launch-assessment' : '/schedule-interview';
-            const payload = previewMode === 'launch' ? {
-                job_name: activeJobTitle,
-                assessment_details: {
-                    assessment_id: activeAssessment.id,
-                    title: activeAssessment.title,
-                    description: activeAssessment.description,
-                    duration: activeAssessment.duration,
-                    difficulty: activeAssessment.difficulty,
-                    focus_areas: activeAssessment.focus
-                }
-            } : {
-                job_name: activeJobTitle,
-                assessment_id: activeAssessment.id,
-                title: activeAssessment.title
-            };
-
-            const response = await fetch(`http://localhost:8001/api/v1/emails${url}`, {
+            const res = await fetch(`${API}/emails/schedule-interview`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(payload)
+                body: JSON.stringify({
+                    job_name: job.title,
+                    assessment_id: String(a.id),
+                    title: a.title
+                })
             });
-            
-            if (response.ok) {
-                const result = await response.json();
-                setToast({ message: `🚀 Success: ${result.message}`, type: 'success' });
-                setPreviewModalOpen(false);
-            } else {
-                const errorData = await response.json();
-                setToast({ message: `❌ Failed: ${errorData.detail || 'Server Error'}`, type: 'error' });
-            }
-        } catch (err) {
-            setToast({ message: `❌ Connection Error: Backend server is offline.`, type: 'error' });
-        } finally {
-            setIsEmailSending(false);
-        }
+            const data = await res.json();
+            if (res.ok && data.status === 'success') toast(data.message, 'success');
+            else toast(data.detail || data.message || 'Schedule failed', 'danger');
+        } catch { toast('Network error during scheduling', 'danger'); }
     };
 
-    const handleCreateTest = (jobId?: number, jobTitle?: string) => {
-        setIsModalOpen(true);
-        setSelection(null);
-        setEditingId(null);
-        setTitle('');
-        setDescription('');
-        setDifficulty('Intermediate');
-        setDuration('3 Hours');
-        if (jobId) setTargetJobId(jobId);
-        if (jobTitle) setTargetJobName(jobTitle);
-    };
+    const grouped = jobs.map(j => ({
+        job: j,
+        items: assessments.filter(a => a.job_id === j.id && (
+            !search || a.title.toLowerCase().includes(search.toLowerCase()) || a.focus.some(f => f.toLowerCase().includes(search.toLowerCase()))
+        ))
+    })).filter(g => g.items.length > 0 || !search);
 
-    const handleEditTest = (assessment: Assessment, jobId: number, jobTitle: string) => {
-        setIsModalOpen(true);
-        setSelection('manual');
-        setEditingId(assessment.id);
-        setTitle(assessment.title);
-        setDescription(assessment.description);
-        setDifficulty(assessment.difficulty);
-        setDuration(assessment.duration);
-        setTargetJobId(jobId);
-        setTargetJobName(jobTitle);
-    };
-
-    const handleViewSubmissions = async (assessmentId: string) => {
-        setViewingSubmissionsId(assessmentId);
-        try {
-            const response = await fetch(`http://localhost:8001/api/v1/submissions/assessment/${assessmentId}`);
-            if (response.ok) {
-                const data = await response.json();
-                setSubmissions(data);
-            }
-        } catch (err) {
-            console.error("Failed to fetch submissions:", err);
-        }
-    };
-
-    const handleAiGenerate = async () => {
-        setIsGenerating(true);
-        try {
-            const url = `http://localhost:8001/api/v1/assessments/generate?job_id=${targetJobId}&difficulty=${difficulty}&context=${encodeURIComponent(description)}`;
-            const response = await fetch(url, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' }
-            });
-            
-            if (response.ok) {
-                await fetchData();
-                setIsGenerating(false);
-                setIsModalOpen(false);
-                setToast({ message: "🚀 Dynamic AI Assessment Generated and Saved!", type: 'success' });
-            } else {
-                const err = await response.json();
-                throw new Error(err.detail || "AI Generation failed");
-            }
-        } catch (err: any) {
-            console.error(err);
-            setToast({ message: `❌ AI Error: ${err.message}`, type: 'error' });
-            setIsGenerating(false);
-        }
-    };
-
-    const handleDeleteTest = async (id: string) => {
-        if (!window.confirm("Are you sure you want to permanently delete this assessment?")) return;
-        try {
-            const response = await fetch(`http://localhost:8001/api/v1/assessments/${id}`, {
-                method: 'DELETE',
-            });
-            if (response.ok) {
-                await fetchData();
-                setToast({ message: "🗑️ Assessment deleted successfully!", type: 'success' });
-            }
-        } catch (err) {
-            console.error("Delete failed:", err);
-            setToast({ message: "❌ Delete failed: Backend offline.", type: 'error' });
-        }
-    };
-
-    const handleManualSave = async () => {
-        const assessmentPayload = {
-            title: title || 'Custom Skills Test',
-            duration: duration || '2 Hours',
-            difficulty: difficulty,
-            focus: ['Custom Validation', 'Hands-on'],
-            description: description || 'Manual vetting challenge.',
-            job_id: targetJobId
-        };
-
-        try {
-            const url = editingId 
-                ? `http://localhost:8001/api/v1/assessments/${editingId}`
-                : 'http://localhost:8001/api/v1/assessments/';
-            const method = editingId ? 'PUT' : 'POST';
-
-            const response = await fetch(url, {
-                method: method,
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(assessmentPayload)
-            });
-            
-            if (response.ok) {
-                await fetchData();
-                setIsModalOpen(false);
-                setToast({ 
-                    message: editingId ? "✅ Assessment Updated!" : "✅ Custom Assessment Saved!", 
-                    type: 'success' 
-                });
-            }
-        } catch (err) {
-            console.error(err);
-        }
-    };
+    const totalByDiff = (d: string) => assessments.filter(a => a.difficulty === d).length;
 
     return (
-        <div className="flex-1 overflow-hidden bg-[#f0f1f0]" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>
+        <div className="flex-1 flex flex-col bg-base">
+            {/* Toasts */}
+            <div className="fixed top-4 right-4 z-[100] space-y-2 pointer-events-none">
+                {toasts.map(t => {
+                    const borderCls = t.type === 'danger' ? 'border-red-200' : t.type === 'info' ? 'border-blue-200' : 'border-emerald-200';
+                    return (
+                        <div key={t.id} className={`flex items-center gap-3 px-4 py-3 rounded-xl border shadow-xl bg-white min-w-[260px] pointer-events-auto ${borderCls}`}>
+                            {t.type === 'danger' && <AlertCircle className="w-4 h-4 text-red-500"/>}
+                            {t.type === 'info' && <Loader className="w-4 h-4 text-blue-500 animate-spin"/>}
+                            {t.type === 'success' && <CheckCircle2 className="w-4 h-4 text-emerald-500"/>}
+                            <span className="text-sm font-semibold text-txt-primary">{t.msg}</span>
+                        </div>
+                    );
+                })}
+            </div>
 
-            {/* Main Content */}
-            <main className="flex-1 overflow-auto p-12 custom-scrollbar">
-                <div className="max-w-[1240px] mx-auto">
-                    <div className="flex flex-col md:flex-row md:items-end justify-between mb-12 gap-6">
-                        <div className="max-w-xl">
-                            <h1 className="text-4xl font-extrabold text-slate-800 tracking-tight mb-3">
-                                Hands-on <span className="text-primary underline decoration-primary/30">Proficiency Vetting</span>
-                            </h1>
-                            <p className="text-slate-500 font-medium leading-relaxed">
-                                Our skills assessments simulate real-world challenges (2–4 hours). Evaluate candidate 
-                                <span className="text-slate-800 font-bold"> hands-on proficiency</span> rather than just theoretical knowledge.
-                            </p>
+            {/* Header */}
+            <section className="px-8 pt-6 pb-0">
+                <div className="flex items-center justify-between">
+                    <div>
+                        <div className="flex items-center gap-2 text-sm text-txt-muted mb-1">
+                            <button onClick={() => navigate('/dashboard')} className="hover:text-primary transition-colors">Overview</button>
+                            <ChevronRight className="w-3 h-3"/>
+                            <span className="text-txt-primary">Assessments</span>
                         </div>
-                        <div className="flex gap-4">
-                            <button 
-                                onClick={() => handleCreateTest()}
-                                className="px-6 py-3 bg-white border border-accent/20 text-slate-800 rounded-xl font-bold flex items-center gap-2 hover:bg-slate-50 transition-all shadow-soft"
-                            >
-                                <span className="material-symbols-outlined">add_circle</span> Create Global Challenge
-                            </button>
-                        </div>
+                        <h2 className="text-2xl font-semibold tracking-tight text-txt-primary">Assessments</h2>
+                        <p className="text-sm text-txt-muted mt-0.5">Create and manage technical challenges for candidates</p>
                     </div>
+                    <button onClick={openModal} className="px-4 py-2 bg-primary hover:bg-primary-dark text-sm font-semibold rounded-lg transition-all flex items-center gap-2 text-white shadow-lg shadow-primary/20">
+                        <Plus className="w-4 h-4"/> New Assessment
+                    </button>
+                </div>
+            </section>
 
-                    <div className="space-y-16">
-                        {groups.map(group => (
-                            <section key={group.jobTitle}>
-                                <div className="flex items-center gap-4 mb-8">
-                                    <div className="h-[2px] flex-1 bg-slate-200" />
-                                    <h3 className="px-5 py-2 bg-slate-800 text-white rounded-full text-xs font-black uppercase tracking-widest shadow-lg">
-                                        {group.jobTitle}
-                                    </h3>
-                                    <div className="h-[2px] flex-1 bg-slate-200" />
+            {/* Stats */}
+            <section className="px-8 pt-5 pb-0">
+                <div className="grid grid-cols-4 gap-4">
+                    {[
+                        { label:'Total', val: assessments.length, color:'bg-blue-50 text-blue-600', icon: ClipboardCheck },
+                        { label:'Expert', val: totalByDiff('Expert'), color:'bg-red-50 text-red-600', icon: Zap },
+                        { label:'Intermediate', val: totalByDiff('Intermediate'), color:'bg-amber-50 text-amber-600', icon: Brain },
+                        { label:'Easy', val: totalByDiff('Easy'), color:'bg-emerald-50 text-emerald-600', icon: CheckCircle2 },
+                    ].map(s => (
+                        <div key={s.label} className="bg-surface rounded-xl p-4 border border-bdr hover:border-primary/30 hover:-translate-y-0.5 transition-all shadow-sm">
+                            <div className="flex items-center gap-3">
+                                <div className={`w-9 h-9 rounded-lg ${s.color} flex items-center justify-center`}><s.icon className="w-[18px] h-[18px]"/></div>
+                                <div><p className="text-xl font-semibold text-txt-primary">{loading ? '—' : s.val}</p><p className="text-xs text-txt-muted">{s.label}</p></div>
+                            </div>
+                        </div>
+                    ))}
+                </div>
+            </section>
+
+            {/* Search */}
+            <section className="px-8 pt-5 pb-0">
+                <div className="relative max-w-sm">
+                    <input type="text" placeholder="Search assessments..." value={search} onChange={e => setSearch(e.target.value)}
+                        className="w-full bg-white border border-bdr rounded-lg px-4 py-2.5 pl-10 text-sm outline-none focus:border-primary transition-all shadow-sm"/>
+                    <Search className="w-4 h-4 text-txt-faint absolute left-3.5 top-1/2 -translate-y-1/2"/>
+                </div>
+            </section>
+
+            {/* Content */}
+            <section className="px-8 pt-6 pb-10 overflow-y-auto flex-1">
+                {loading ? (
+                    <div className="flex items-center justify-center py-24"><Loader className="w-8 h-8 text-primary/30 animate-spin"/></div>
+                ) : assessments.length === 0 ? (
+                    <div className="flex flex-col items-center justify-center py-24 gap-4">
+                        <div className="w-20 h-20 rounded-3xl bg-slate-50 border border-dashed border-slate-200 flex items-center justify-center"><ClipboardCheck className="w-8 h-8 text-slate-200"/></div>
+                        <p className="text-sm font-semibold text-txt-muted uppercase tracking-widest">No assessments yet</p>
+                        <button onClick={openModal} className="px-5 py-2.5 bg-primary text-white rounded-xl text-sm font-bold shadow-lg shadow-primary/20 hover:bg-primary-dark transition-all"><Plus className="w-4 h-4 inline mr-1"/>Create First Assessment</button>
+                    </div>
+                ) : (
+                    <div className="space-y-12">
+                        {grouped.map(({ job, items }) => (
+                            <div key={job.id}>
+                                <div className="flex items-center gap-4 mb-6">
+                                    <div className="w-9 h-9 bg-slate-900 rounded-2xl flex items-center justify-center shadow-lg"><Briefcase className="w-4 h-4 text-white"/></div>
+                                    <div>
+                                        <h3 className="font-bold text-txt-primary">{job.title}</h3>
+                                        <p className="text-[11px] text-txt-muted font-bold uppercase tracking-widest">{items.length} challenge{items.length !== 1 ? 's' : ''}</p>
+                                    </div>
+                                    <div className="h-px flex-1 bg-gradient-to-r from-slate-100 to-transparent"/>
+                                    <button onClick={() => { setForm(f => ({...f, job_id: job.id})); openModal(); }} className="text-xs font-bold text-primary flex items-center gap-1 hover:underline"><Plus className="w-3 h-3"/>Add Challenge</button>
                                 </div>
-                                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-                                    {group.assessments.map(as => (
-                                        <AssessmentCard 
-                                            key={as.id} 
-                                            assessment={as} 
-                                            onLaunch={() => handleLaunchAssessment(group.jobTitle, as)}
-                                            onSchedule={() => handleScheduleInterview(group.jobTitle, as)}
-                                            onEdit={() => handleEditTest(as, group.jobId, group.jobTitle)}
-                                            onDelete={() => handleDeleteTest(as.id)}
-                                            onViewSubmissions={() => handleViewSubmissions(as.id)}
-                                        />
-                                    ))}
-                                    <button 
-                                        onClick={() => handleCreateTest(group.jobId, group.jobTitle)}
-                                        className="border-4 border-dashed border-slate-200 rounded-2xl p-6 flex flex-col items-center justify-center text-slate-300 hover:text-primary hover:border-primary/50 transition-all group"
-                                    >
-                                        <span className="material-symbols-outlined text-4xl mb-2 group-hover:rotate-90 transition-transform">add</span>
-                                        <span className="font-bold uppercase tracking-widest text-[10px]">Add Test for {group.jobTitle.split(' ')[0]}...</span>
+                                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                                    {items.map(a => {
+                                        const FmtIcon = FORMAT_ICON[a.required_format] || FORMAT_ICON.default;
+                                        return (
+                                            <div key={a.id} className="bg-white rounded-2xl border border-slate-100 shadow-sm hover:shadow-lg hover:-translate-y-1 transition-all flex flex-col p-6 relative group overflow-hidden">
+                                                <div className="absolute -right-6 -top-6 w-20 h-20 bg-primary/5 rounded-full group-hover:bg-primary/10 transition-all"/>
+                                                <div className="flex items-start justify-between mb-4">
+                                                    <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider border ${DIFF_COLOR[a.difficulty] || DIFF_COLOR.Intermediate}`}>{a.difficulty}</span>
+                                                    <div className="flex gap-1">
+                                                        <button onClick={() => setDetail(a)} title="View details" className="w-8 h-8 rounded-xl bg-slate-50 flex items-center justify-center text-slate-400 hover:text-primary hover:bg-primary/5 transition-all"><Eye className="w-3.5 h-3.5"/></button>
+                                                        <button onClick={() => deleteAssessment(a.id)} title="Delete" className="w-8 h-8 rounded-xl bg-slate-50 flex items-center justify-center text-slate-400 hover:text-red-500 hover:bg-red-50 transition-all"><Trash2 className="w-3.5 h-3.5"/></button>
+                                                    </div>
+                                                </div>
+                                                <h4 className="font-bold text-txt-primary mb-2 group-hover:text-primary transition-colors line-clamp-2">{a.title}</h4>
+                                                <p className="text-xs text-txt-muted leading-relaxed mb-4 line-clamp-3 flex-1">{a.description.replace(/#+/g,'').trim()}</p>
+                                                <div className="flex flex-wrap gap-1.5 mb-5">
+                                                    <span className="px-2 py-1 bg-primary/5 text-primary rounded-lg text-[10px] font-bold flex items-center gap-1"><FmtIcon className="w-3 h-3"/>{a.required_format}</span>
+                                                    {a.focus.slice(0,2).map(f => <span key={f} className="px-2 py-1 bg-slate-50 text-slate-500 rounded-lg text-[10px] font-bold border border-slate-100">{f}</span>)}
+                                                </div>
+                                                {/* Action buttons */}
+                                                <div className="flex gap-2 mt-auto">
+                                                    <button
+                                                        onClick={() => launchAssessment(a, job)}
+                                                        className="flex-1 flex items-center justify-center gap-1.5 py-2.5 bg-primary hover:bg-primary-dark text-white rounded-xl text-[11px] font-black uppercase tracking-wider transition-all shadow-sm shadow-primary/20 active:scale-95"
+                                                    >
+                                                        <Send className="w-3.5 h-3.5"/>Launch
+                                                    </button>
+                                                    <button
+                                                        onClick={() => scheduleAssessment(a, job)}
+                                                        title="Send scheduling email with Google Calendar link"
+                                                        className="flex items-center justify-center gap-1.5 px-3 py-2.5 bg-slate-50 hover:bg-slate-100 border border-slate-200 text-slate-600 hover:text-primary rounded-xl text-[11px] font-black uppercase tracking-wider transition-all active:scale-95"
+                                                    >
+                                                        <Calendar className="w-3.5 h-3.5"/>Schedule
+                                                    </button>
+                                                </div>
+                                                <div className="flex items-center justify-between text-[10px] text-txt-faint font-bold uppercase tracking-wider border-t border-slate-50 pt-3 mt-3">
+                                                    <span>{a.duration}</span>
+                                                    <span>{a.steps.length} step{a.steps.length !== 1 ? 's' : ''}</span>
+                                                </div>
+                                            </div>
+                                        );
+                                    })}
+                                    {/* Add card */}
+                                    <button onClick={() => { setForm(f => ({...f, job_id: job.id})); openModal(); }}
+                                        className="border-2 border-dashed border-slate-200 rounded-2xl p-8 flex flex-col items-center justify-center text-slate-300 hover:text-primary hover:border-primary hover:bg-primary/5 transition-all group min-h-[200px]">
+                                        <div className="w-12 h-12 rounded-full border-2 border-dashed border-current flex items-center justify-center mb-3 group-hover:rotate-90 transition-transform duration-500"><Plus className="w-6 h-6"/></div>
+                                        <span className="font-bold uppercase tracking-widest text-[10px]">Add Challenge</span>
                                     </button>
                                 </div>
-                            </section>
+                            </div>
                         ))}
                     </div>
+                )}
+            </section>
 
-                    {/* Footer Info */}
-                    <div className="mt-20 p-8 bg-primary/5 rounded-3xl border border-primary/10 flex items-center gap-8">
-                        <div className="w-16 h-16 bg-white rounded-2xl shadow-lg flex items-center justify-center text-primary">
-                            <span className="material-symbols-outlined text-3xl">psychology</span>
+            {/* Detail Panel */}
+            {detail && (
+                <div className="fixed inset-0 z-[90] flex">
+                    <div className="absolute inset-0 bg-black/20 backdrop-blur-sm" onClick={() => setDetail(null)}/>
+                    <div className="absolute right-0 top-0 bottom-0 w-[500px] bg-white border-l border-bdr overflow-y-auto shadow-2xl flex flex-col animate-slide-in">
+                        <div className="p-6 border-b border-slate-100 flex items-center justify-between sticky top-0 bg-white/95 backdrop-blur-sm">
+                            <div><h3 className="font-bold text-txt-primary">{detail.title}</h3><p className="text-xs text-txt-muted">{detail.duration} · {detail.difficulty}</p></div>
+                            <button onClick={() => setDetail(null)} className="p-2 rounded-xl hover:bg-elevated transition-all"><X className="w-5 h-5 text-txt-muted"/></button>
                         </div>
-                        <div className="flex-1">
-                            <h5 className="font-bold text-slate-800 mb-1 leading-none">Automated Submission Analysis</h5>
-                            <p className="text-xs text-slate-500 font-medium">NEXUS AI automatically scores code submissions, UX prototypes, and architectural diagrams based on your company benchmarks.</p>
-                        </div>
-                        <button 
-                            onClick={() => setIsFilterModalOpen(true)}
-                            className="bg-primary text-white px-6 py-3 rounded-xl font-bold text-sm shadow-xl shadow-primary/20 hover:scale-105 transition-all"
-                        >
-                            Configure Agent Filters
-                        </button>
-                    </div>
-                </div>
-            </main>
-
-            {/* --- Add Test UI Modal --- */}
-            {isModalOpen && (
-                <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 animate-in fade-in duration-300 backdrop-blur-md">
-                    <div className="absolute inset-0 bg-slate-900/40" onClick={() => setIsModalOpen(false)}></div>
-                    <div className="relative w-full max-w-3xl bg-white rounded-[2.5rem] shadow-2xl overflow-hidden animate-in zoom-in-95 duration-300 p-12">
-                        <div className="flex justify-between items-start mb-10">
+                        <div className="p-6 space-y-6 flex-1">
                             <div>
-                                <h2 className="text-3xl font-extrabold text-slate-800 mb-2">
-                                    {editingId ? 'Edit' : 'New'} Assessment <span className="text-primary">Pipeline</span>
-                                </h2>
-                                <p className="text-slate-400 font-medium tracking-tight">Vetting for: <span className="text-slate-800 font-bold">{targetJobName}</span></p>
+                                <p className="text-[10px] font-black text-txt-muted uppercase tracking-widest mb-2">Description</p>
+                                <div className="bg-slate-50 rounded-2xl p-4 text-sm text-txt-secondary leading-relaxed whitespace-pre-wrap">{detail.description}</div>
                             </div>
-                            <button onClick={() => setIsModalOpen(false)} className="w-10 h-10 rounded-full hover:bg-slate-100 flex items-center justify-center text-slate-400 transition-colors">
-                                <span className="material-symbols-outlined text-2xl">close</span>
-                            </button>
-                        </div>
-
-                        {!selection ? (
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                                <button
-                                    onClick={() => setSelection('manual')}
-                                    className="p-8 rounded-3xl border-2 border-slate-100 hover:border-primary/30 bg-slate-50/50 hover:bg-primary/5 transition-all text-left flex flex-col group"
-                                >
-                                    <div className="w-14 h-14 bg-white rounded-2xl flex items-center justify-center text-slate-400 mb-6 group-hover:bg-primary group-hover:text-white transition-all shadow-sm">
-                                        <span className="material-symbols-outlined text-3xl">edit_note</span>
-                                    </div>
-                                    <h3 className="text-xl font-bold text-slate-800 mb-2 tracking-tight">Manual Design</h3>
-                                    <p className="text-sm text-slate-500 font-medium leading-relaxed mb-8 flex-1">
-                                        Hand-craft the challenge tasks, set specific milestones, and provide exact requirements.
-                                    </p>
-                                    <div className="text-primary font-bold text-sm flex items-center gap-2">
-                                        Open Designer <span className="material-symbols-outlined text-lg">arrow_forward</span>
-                                    </div>
-                                </button>
-
-                                <button
-                                    onClick={() => setSelection('ai')}
-                                    className="p-8 rounded-3xl border-2 border-slate-900 bg-slate-900 text-white transition-all text-left flex flex-col relative group overflow-hidden"
-                                >
-                                    <div className="absolute -right-4 -bottom-4 opacity-10 blur-xl w-32 h-32 bg-primary rounded-full"></div>
-                                    <div className="relative z-10">
-                                        <div className="w-14 h-14 bg-primary rounded-2xl flex items-center justify-center text-white mb-6 shadow-[0_0_20px_rgba(65,90,119,0.4)]">
-                                            <span className="material-symbols-outlined text-3xl">neurology</span>
-                                        </div>
-                                        <h3 className="text-xl font-bold mb-2 tracking-tight">AI Generator</h3>
-                                        <p className="text-sm text-slate-400 font-medium leading-relaxed mb-8 flex-1">
-                                            Describe your needs and let AI generate a customized real-world validation test.
-                                        </p>
-                                        <div className="text-white font-bold text-sm flex items-center gap-2 group-hover:gap-4 transition-all">
-                                            Launch AI Pilot <span className="material-symbols-outlined text-lg">magic_button</span>
-                                        </div>
-                                    </div>
-                                </button>
-                            </div>
-                        ) : (
-                            <div className="space-y-6">
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                            {detail.steps.length > 0 && (
+                                <div>
+                                    <p className="text-[10px] font-black text-txt-muted uppercase tracking-widest mb-3">Steps</p>
                                     <div className="space-y-2">
-                                        <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest pl-1">
-                                            {selection === 'ai' ? 'Optional Title' : 'Challenge Title'}
-                                        </label>
-                                        <input 
-                                            value={title}
-                                            onChange={(e) => setTitle(e.target.value)}
-                                            className="w-full px-5 py-4 bg-slate-50 border border-slate-100 rounded-2xl text-sm outline-none focus:ring-2 focus:ring-primary/20" 
-                                            placeholder={selection === 'ai' ? 'AI will name it if blank' : 'e.g. Distributed Cache Design'} 
-                                        />
-                                    </div>
-                                    <div className="space-y-2">
-                                        <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest pl-1">Estimated Time Needed</label>
-                                        <input 
-                                            value={duration}
-                                            onChange={(e) => setDuration(e.target.value)}
-                                            className="w-full px-5 py-4 bg-slate-50 border border-slate-100 rounded-2xl text-sm outline-none focus:ring-2 focus:ring-primary/20" 
-                                            placeholder="e.g. 4 Hours" 
-                                        />
-                                    </div>
-                                </div>
-                                
-                                <div className="space-y-2">
-                                    <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest pl-1">Target Difficulty</label>
-                                    <div className="flex gap-2">
-                                        {(['Easy', 'Intermediate', 'Expert'] as const).map((d) => (
-                                            <button
-                                                key={d}
-                                                onClick={() => setDifficulty(d)}
-                                                className={`flex-1 py-3 rounded-xl text-[10px] font-black uppercase tracking-tighter border transition-all ${
-                                                    difficulty === d 
-                                                        ? d === 'Easy' ? 'bg-emerald-500 text-white border-emerald-500 shadow-lg shadow-emerald-200 scale-105'
-                                                        : d === 'Intermediate' ? 'bg-amber-500 text-white border-amber-500 shadow-lg shadow-amber-200 scale-105'
-                                                        : 'bg-red-500 text-white border-red-500 shadow-lg shadow-red-200 scale-105'
-                                                        : 'bg-white text-slate-400 border-slate-100 hover:border-slate-300'
-                                                }`}
-                                            >
-                                                {d}
-                                            </button>
+                                        {detail.steps.map((s,i) => (
+                                            <div key={i} className="flex items-start gap-3 p-3 bg-white rounded-xl border border-slate-100">
+                                                <span className="w-6 h-6 rounded-full bg-primary/10 text-primary text-[10px] font-black flex items-center justify-center flex-shrink-0">{i+1}</span>
+                                                <p className="text-sm text-txt-secondary">{s}</p>
+                                            </div>
                                         ))}
                                     </div>
                                 </div>
-
-                                <div className="space-y-2">
-                                    <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest pl-1">
-                                        {selection === 'ai' ? 'Context for AI (Skills, Tasks, Edge-cases)' : 'Description & Tasks'}
-                                    </label>
-                                    <textarea 
-                                        value={description}
-                                        onChange={(e) => setDescription(e.target.value)}
-                                        className="w-full px-5 py-4 bg-slate-50 border border-slate-100 rounded-2xl text-sm outline-none focus:ring-2 focus:ring-primary/20" 
-                                        rows={4} 
-                                        placeholder={selection === 'ai' ? 'Tell the AI what specifically to vet (e.g. "Focus on PostgreSQL indexing and concurrency").' : 'Detailed description of the challenge...'} 
-                                    />
-                                </div>
-
-                                {isGenerating ? (
-                                    <div className="flex flex-col items-center justify-center py-6">
-                                        <div className="w-12 h-12 rounded-full border-4 border-primary/20 border-t-primary animate-spin mb-4"></div>
-                                        <p className="text-sm font-bold text-primary animate-pulse tracking-widest uppercase">AI Agent Generating Challenge...</p>
-                                    </div>
-                                ) : (
-                                    <div className="flex gap-4 pt-4">
-                                        <button onClick={() => setSelection(null)} className="flex-1 py-4 bg-slate-100 text-slate-600 rounded-2xl font-bold">Back</button>
-                                        <button 
-                                            onClick={selection === 'ai' ? handleAiGenerate : handleManualSave} 
-                                            className={`flex-[2] py-4 rounded-2xl font-bold shadow-xl transition-all flex items-center justify-center gap-2 ${
-                                                selection === 'ai' ? 'bg-slate-900 text-white shadow-slate-200' : 'bg-primary text-white shadow-primary/20'
-                                            }`}
-                                        >
-                                            <span className="material-symbols-outlined">{selection === 'ai' ? 'magic_button' : 'save_as'}</span>
-                                            {selection === 'ai' ? 'Initialize AI Agent' : 'Save & Publish to Pipeline'}
-                                        </button>
-                                    </div>
-                                )}
-                            </div>
-                        )}
-                    </div>
-                </div>
-            )}
-
-            {/* --- Configure Agent Filters Modal --- */}
-            {isFilterModalOpen && (
-                <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 animate-in fade-in duration-300 backdrop-blur-md">
-                    <div className="absolute inset-0 bg-slate-900/40" onClick={() => setIsFilterModalOpen(false)}></div>
-                    <div className="relative w-full max-w-xl bg-white rounded-[2.5rem] shadow-2xl overflow-hidden animate-in zoom-in-95 duration-300 p-12">
-                        <div className="flex justify-between items-start mb-10">
-                            <div>
-                                <h2 className="text-3xl font-extrabold text-slate-800 mb-2">Agent <span className="text-primary">Intelligence</span></h2>
-                                <p className="text-slate-400 font-medium">Fine-tune how NEXUS AI grades submissions.</p>
-                            </div>
-                            <button onClick={() => setIsFilterModalOpen(false)} className="w-10 h-10 rounded-full hover:bg-slate-100 flex items-center justify-center text-slate-400 transition-colors">
-                                <span className="material-symbols-outlined text-2xl">close</span>
-                            </button>
-                        </div>
-
-                        <div className="space-y-10">
-                            {/* Passing Threshold */}
-                            <div className="space-y-4">
-                                <div className="flex justify-between items-center">
-                                    <label className="text-xs font-black uppercase text-slate-800 tracking-widest">Passing Threshold</label>
-                                    <span className="text-2xl font-black text-primary">{threshold}%</span>
-                                </div>
-                                <input 
-                                    type="range" 
-                                    min="0" 
-                                    max="100" 
-                                    value={threshold} 
-                                    onChange={(e) => setThreshold(parseInt(e.target.value))}
-                                    className="w-full h-2 bg-slate-100 rounded-lg appearance-none cursor-pointer accent-primary" 
-                                />
-                                <p className="text-[10px] text-slate-400 font-medium">Candidates scoring below this will be flagged for manual review or auto-rejected.</p>
-                            </div>
-
-                            {/* Auto-Reject Toggle */}
-                            <div className="flex items-center justify-between p-6 bg-slate-50 rounded-2xl border border-slate-100">
-                                <div>
-                                    <h4 className="text-sm font-bold text-slate-800 mb-1">Autonomous Rejection</h4>
-                                    <p className="text-[10px] text-slate-400 font-medium">Instantly move poor performers to the "Archived" pool.</p>
-                                </div>
-                                <button 
-                                    onClick={() => setAutoReject(!autoReject)}
-                                    className={`w-14 h-8 rounded-full transition-all relative ${autoReject ? 'bg-primary' : 'bg-slate-300'}`}
-                                >
-                                    <div className={`absolute top-1 w-6 h-6 bg-white rounded-full shadow-md transition-all ${autoReject ? 'left-7' : 'left-1'}`} />
-                                </button>
-                            </div>
-
-                            {/* Focus Areas */}
-                            <div className="space-y-4">
-                                <label className="text-xs font-black uppercase text-slate-800 tracking-widest">Primary Evaluation Nodes</label>
-                                <div className="flex flex-wrap gap-3">
-                                    {['Code Quality', 'Efficiency', 'Documentation', 'Scalability', 'Security', 'UX Precision'].map(tag => (
-                                        <div key={tag} className="px-4 py-2 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-600 flex items-center gap-2 cursor-pointer hover:border-primary/50 transition-all">
-                                            <div className="w-2 h-2 bg-primary/20 rounded-full" />
-                                            {tag}
-                                        </div>
-                                    ))}
-                                </div>
-                            </div>
-
-                            <button 
-                                onClick={() => {
-                                    setIsFilterModalOpen(false);
-                                }}
-                                className="w-full py-4 bg-slate-900 text-white rounded-2xl font-bold shadow-xl shadow-slate-200 hover:scale-[1.02] active:scale-[0.98] transition-all"
-                            >
-                                Apply Agent Intelligence
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            )}
-            {/* --- View Submissions Modal --- */}
-            {viewingSubmissionsId && (
-                <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 animate-in fade-in duration-300 backdrop-blur-md">
-                    <div className="absolute inset-0 bg-slate-900/40" onClick={() => setViewingSubmissionsId(null)}></div>
-                    <div className="relative w-full max-w-4xl bg-white rounded-[2.5rem] shadow-2xl overflow-hidden animate-in zoom-in-95 duration-300 p-12 max-h-[90vh] flex flex-col">
-                        <div className="flex justify-between items-start mb-10">
-                            <div>
-                                <h2 className="text-3xl font-extrabold text-slate-800 mb-2">Candidate <span className="text-primary">Submissions</span></h2>
-                                <p className="text-slate-400 font-medium">Review candidate responses for this assessment node.</p>
-                            </div>
-                            <button onClick={() => setViewingSubmissionsId(null)} className="w-10 h-10 rounded-full hover:bg-slate-100 flex items-center justify-center text-slate-400 transition-colors">
-                                <span className="material-symbols-outlined text-2xl">close</span>
-                            </button>
-                        </div>
-
-                        <div className="flex-1 overflow-y-auto space-y-6 custom-scrollbar pr-2">
-                            {submissions.length === 0 ? (
-                                <div className="text-center py-20 bg-slate-50 rounded-3xl border border-dashed border-slate-200">
-                                    <span className="material-symbols-outlined text-4xl text-slate-200 mb-2">inbox</span>
-                                    <p className="text-slate-400 font-bold uppercase tracking-widest text-xs">No submissions yet.</p>
-                                </div>
-                            ) : (
-                                submissions.map((sub: any) => (
-                                    <div key={sub.id} className="p-8 bg-slate-50 rounded-3xl border border-slate-100 flex flex-col gap-4 relative group/item">
-                                        <div className="flex justify-between items-center border-b border-slate-200 pb-4">
-                                            <div className="flex items-center gap-3">
-                                                <div className="w-10 h-10 bg-white rounded-xl shadow-sm flex items-center justify-center text-primary">
-                                                    <span className="material-symbols-outlined">person</span>
-                                                </div>
-                                                <div>
-                                                    <p className="text-sm font-bold text-slate-800">{sub.candidate_email}</p>
-                                                    <p className="text-[10px] text-slate-400 font-black uppercase tracking-widest">
-                                                        Submitted: {new Date(sub.submitted_at).toLocaleString()}
-                                                    </p>
-                                                </div>
-                                            </div>
-                                            <div className="flex items-center gap-3">
-                                                {sub.grade ? (
-                                                    <div className="flex items-center gap-2">
-                                                        <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Grade:</span>
-                                                        <div className="px-4 py-1 bg-primary text-white rounded-lg text-sm font-black shadow-lg shadow-primary/20">
-                                                            {sub.grade}
-                                                        </div>
-                                                    </div>
-                                                ) : (
-                                                    <div className="px-3 py-1 bg-slate-200 text-slate-500 rounded-lg text-[10px] font-black uppercase tracking-widest">
-                                                        Pending Evaluation
-                                                    </div>
-                                                )}
-                                            </div>
-                                        </div>
-                                        
-                                        <div className="grid grid-cols-12 gap-6">
-                                            <div className="col-span-12 lg:col-span-12">
-                                                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 block">Candidate Response</label>
-                                                <div className="bg-white p-6 rounded-2xl border border-slate-200 text-sm text-slate-600 font-mono whitespace-pre-wrap leading-relaxed max-h-[200px] overflow-y-auto">
-                                                    {sub.answer}
-                                                </div>
-                                            </div>
-                                            
-                                            {sub.feedback && (
-                                                <div className="col-span-12 bg-primary/5 border border-primary/10 p-6 rounded-2xl">
-                                                    <label className="text-[10px] font-black text-primary uppercase tracking-widest mb-2 block">Evaluation Feedback</label>
-                                                    <p className="text-sm italic text-slate-700 leading-relaxed">"{sub.feedback}"</p>
-                                                </div>
-                                            )}
-                                        </div>
-
-                                        <div className="flex gap-3 pt-4 border-t border-slate-100">
-                                            <button 
-                                                onClick={async () => {
-                                                    const g = prompt("Enter Grade (A-F):", sub.grade || "");
-                                                    const f = prompt("Enter Feedback:", sub.feedback || "");
-                                                    if (g) {
-                                                        const res = await fetch(`http://localhost:8001/api/v1/submissions/${sub.id}/grade?grade=${encodeURIComponent(g)}&feedback=${encodeURIComponent(f || "")}`, { method: 'PUT' });
-                                                        if (res.ok) handleViewSubmissions(viewingSubmissionsId!);
-                                                    }
-                                                }}
-                                                className="flex-1 py-3 bg-white border border-slate-200 text-slate-600 rounded-xl text-[10px] font-black uppercase tracking-widest hover:border-primary hover:text-primary transition-all flex items-center justify-center gap-2"
-                                            >
-                                                <span className="material-symbols-outlined text-sm">edit_note</span>
-                                                Manual Grade
-                                            </button>
-                                            <button 
-                                                onClick={async (e) => {
-                                                    const btn = e.currentTarget;
-                                                    btn.disabled = true;
-                                                    btn.innerHTML = 'AI Evaluating...';
-                                                    try {
-                                                        const res = await fetch(`http://localhost:8001/api/v1/submissions/${sub.id}/ai-grade`, { method: 'POST' });
-                                                        if (res.ok) handleViewSubmissions(viewingSubmissionsId!);
-                                                    } finally {
-                                                        btn.disabled = false;
-                                                        btn.innerHTML = '<span class="material-symbols-outlined text-sm">psychology</span> AI Grade';
-                                                    }
-                                                }}
-                                                className="flex-1 py-3 bg-slate-900 text-white rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-primary transition-all flex items-center justify-center gap-2"
-                                            >
-                                                <span className="material-symbols-outlined text-sm">psychology</span>
-                                                AI Grade
-                                            </button>
-                                        </div>
-                                    </div>
-                                ))
                             )}
+                            <div className="grid grid-cols-2 gap-3">
+                                <div className="bg-slate-50 rounded-2xl p-4"><p className="text-[10px] font-black text-txt-muted uppercase mb-1">Format</p><p className="text-sm font-bold text-txt-primary">{detail.required_format}</p></div>
+                                <div className="bg-slate-50 rounded-2xl p-4"><p className="text-[10px] font-black text-txt-muted uppercase mb-1">Threshold</p><p className="text-sm font-bold text-txt-primary">{detail.grading_threshold}%</p></div>
+                            </div>
                         </div>
                     </div>
                 </div>
             )}
 
-            {/* --- Dispatch Preview Modal --- */}
-            {previewModalOpen && (
-                <div className="fixed inset-0 z-[110] flex items-center justify-center p-4 animate-in fade-in duration-300 backdrop-blur-md">
-                    <div className="absolute inset-0 bg-slate-900/40" onClick={() => setPreviewModalOpen(false)}></div>
-                    <div className="relative w-full max-w-2xl bg-white rounded-[2.5rem] shadow-2xl overflow-hidden animate-in zoom-in-95 duration-300 p-10 flex flex-col max-h-[85vh]">
-                        <div className="flex justify-between items-start mb-6">
+            {/* Create Modal */}
+            {modal && (
+                <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/30 backdrop-blur-sm p-4">
+                    <div className="bg-white rounded-[2rem] shadow-2xl w-full max-w-2xl overflow-hidden">
+                        <div className="p-8 border-b border-slate-100 flex items-center justify-between">
                             <div>
-                                <h2 className="text-2xl font-extrabold text-slate-800">
-                                    {previewMode === 'launch' ? 'Launch Evaluation' : 'Schedule Interviews'}
-                                </h2>
-                                <p className="text-sm text-slate-400 font-medium">Preparing dispatch for: <span className="text-slate-800 font-bold">{activeJobTitle}</span></p>
-                            </div>
-                            <button onClick={() => setPreviewModalOpen(false)} className="w-8 h-8 rounded-full hover:bg-slate-100 flex items-center justify-center text-slate-400 transition-colors">
-                                <span className="material-symbols-outlined text-xl">close</span>
-                            </button>
-                        </div>
-
-                        <div className="mb-6 p-4 bg-slate-50 rounded-2xl border border-slate-100">
-                            <div className="flex items-center gap-3">
-                                <span className="material-symbols-outlined text-primary">analytics</span>
-                                <p className="text-xs font-bold text-slate-700">Matched {matchingCandidates.length} Active Candidates</p>
-                            </div>
-                        </div>
-
-                        <div className="flex-1 overflow-y-auto space-y-3 pr-2 custom-scrollbar mb-6">
-                            {matchingCandidates.length === 0 ? (
-                                <div className="text-center py-10">
-                                    <p className="text-slate-400 text-sm font-bold animate-pulse">Scanning database for candidates...</p>
-                                </div>
-                            ) : (
-                                matchingCandidates.map(c => (
-                                    <div key={c.id} className="p-4 bg-white border border-slate-100 rounded-xl flex items-center justify-between group hover:border-primary/30 transition-all shadow-sm">
-                                        <div className="flex items-center gap-3">
-                                            <div className="w-8 h-8 bg-slate-100 rounded-lg flex items-center justify-center text-slate-400 group-hover:bg-primary group-hover:text-white transition-all">
-                                                <span className="material-symbols-outlined text-sm">person</span>
-                                            </div>
-                                            <div>
-                                                <p className="text-sm font-bold text-slate-800 leading-none">{c.name}</p>
-                                                <p className="text-[10px] text-slate-400 font-bold">{c.email}</p>
-                                            </div>
-                                        </div>
-                                        <div className="flex gap-2">
-                                            <button 
-                                                title="Copy Direct Link"
-                                                onClick={() => {
-                                                    const baseLink = previewMode === 'launch' 
-                                                        ? `http://localhost:5173/portal/assessment-portal?assessment_id=${activeAssessment?.id}&email=${c.email}`
-                                                        : `https://calendar.google.com/calendar/selfsched?sstoken=https://calendar.app.google/n2JRv629z27Yb2Vq5`;
-                                                    navigator.clipboard.writeText(baseLink);
-                                                    setToast({ message: "📋 Link copied! You can now send it manually.", type: 'success' });
-                                                }}
-                                                className="w-8 h-8 rounded-lg bg-slate-50 text-slate-400 flex items-center justify-center hover:bg-primary/10 hover:text-primary transition-all border border-slate-100"
-                                            >
-                                                <span className="material-symbols-outlined text-sm">content_copy</span>
-                                            </button>
-                                            <div className="w-4 h-4 bg-emerald-500 rounded-full flex items-center justify-center text-white scale-0 group-hover:scale-100 transition-all duration-300">
-                                                <span className="material-symbols-outlined text-[10px] font-black">done</span>
-                                            </div>
-                                        </div>
-                                    </div>
-                                ))
-                            )}
-                        </div>
-
-                        <div className="space-y-4">
-                            <div className="p-4 bg-amber-50 rounded-2xl border border-amber-100 flex items-start gap-4">
-                                <span className="material-symbols-outlined text-amber-500 text-sm mt-0.5">info</span>
-                                <p className="text-[10px] text-amber-700 font-medium leading-relaxed">
-                                    <b>Manual Fallback Enabled:</b> Use the 📋 icon to copy individual links if your SMTP service is experiencing issues (e.g. Gmail App Password required).
+                                <h2 className="text-2xl font-black text-txt-primary tracking-tight">New Assessment</h2>
+                                <p className="text-xs text-txt-muted mt-1 uppercase tracking-widest font-bold">
+                                    {mode === 'pick' ? 'Choose creation mode' : mode === 'manual' ? 'Manual configuration' : 'AI-powered generation'}
                                 </p>
                             </div>
-                            
-                            <div className="flex gap-4">
-                                <button onClick={() => setPreviewModalOpen(false)} className="flex-1 py-4 bg-slate-100 text-slate-600 rounded-2xl font-bold text-sm">Cancel</button>
-                                <button 
-                                    disabled={matchingCandidates.length === 0 || isEmailSending}
-                                    onClick={handleFinalDispatch}
-                                    className="flex-[2] py-4 bg-slate-900 text-white rounded-2xl font-bold text-sm shadow-xl shadow-slate-200 flex items-center justify-center gap-2 hover:bg-primary transition-all disabled:opacity-50"
-                                >
-                                    {isEmailSending ? 'Dispatching...' : (
+                            <button onClick={closeModal} className="w-10 h-10 rounded-full hover:bg-slate-50 flex items-center justify-center transition-all"><X className="w-5 h-5 text-txt-muted"/></button>
+                        </div>
+
+                        <div className="p-8">
+                            {mode === 'pick' && (
+                                <div className="grid grid-cols-2 gap-4">
+                                    <button onClick={() => setMode('manual')} className="p-6 rounded-2xl border-2 border-slate-100 hover:border-primary/30 bg-slate-50/50 hover:bg-white transition-all text-left flex flex-col gap-4 group hover:shadow-xl">
+                                        <div className="w-12 h-12 bg-white rounded-2xl flex items-center justify-center text-slate-400 group-hover:bg-primary group-hover:text-white transition-all shadow-sm border border-slate-100"><Edit3 className="w-5 h-5"/></div>
+                                        <div>
+                                            <h3 className="font-bold text-txt-primary mb-1">Manual Design</h3>
+                                            <p className="text-xs text-slate-500 leading-relaxed">Define the title, steps, language, and topic yourself.</p>
+                                        </div>
+                                    </button>
+                                    <button onClick={() => setMode('ai')} className="p-6 rounded-2xl bg-slate-900 text-white transition-all text-left flex flex-col gap-4 relative overflow-hidden group shadow-xl hover:shadow-2xl">
+                                        <div className="absolute -right-4 -bottom-4 w-24 h-24 bg-primary/20 blur-xl rounded-full"/>
+                                        <div className="w-12 h-12 bg-primary rounded-2xl flex items-center justify-center shadow-lg shadow-primary/20"><Sparkles className="w-5 h-5 text-white"/></div>
+                                        <div>
+                                            <h3 className="font-bold mb-1">AI Generator</h3>
+                                            <p className="text-xs text-slate-400 leading-relaxed">Let AI create a tailored assessment based on the job requirements.</p>
+                                        </div>
+                                    </button>
+                                </div>
+                            )}
+
+                            {(mode === 'manual' || mode === 'ai') && (
+                                <div className="space-y-4">
+                                    <div className="grid grid-cols-2 gap-4">
+                                        <div>
+                                            <label className="block text-[10px] font-black text-txt-muted uppercase tracking-widest mb-1.5">Job Position *</label>
+                                            <select value={form.job_id} onChange={e => setForm(f => ({...f, job_id: Number(e.target.value)}))} className="w-full border border-bdr rounded-xl px-3 py-2.5 text-sm outline-none focus:border-primary bg-white">
+                                                <option value={0}>Select job…</option>
+                                                {jobs.map(j => <option key={j.id} value={j.id}>{j.title}</option>)}
+                                            </select>
+                                        </div>
+                                        <div>
+                                            <label className="block text-[10px] font-black text-txt-muted uppercase tracking-widest mb-1.5">Difficulty *</label>
+                                            <select value={form.difficulty} onChange={e => setForm(f => ({...f, difficulty: e.target.value}))} className="w-full border border-bdr rounded-xl px-3 py-2.5 text-sm outline-none focus:border-primary bg-white">
+                                                <option>Easy</option><option>Intermediate</option><option>Expert</option>
+                                            </select>
+                                        </div>
+                                    </div>
+
+                                    <div>
+                                        <label className="block text-[10px] font-black text-txt-muted uppercase tracking-widest mb-1.5">Programming Language</label>
+                                        <select value={form.language} onChange={e => setForm(f => ({...f, language: e.target.value}))} className="w-full border border-bdr rounded-xl px-3 py-2.5 text-sm outline-none focus:border-primary bg-white">
+                                            {['python','javascript','typescript','java','sql','css','html','go','rust','text'].map(l => <option key={l} value={l}>{l}</option>)}
+                                        </select>
+                                    </div>
+
+                                    {mode === 'ai' && (
+                                        <div>
+                                            <label className="block text-[10px] font-black text-txt-muted uppercase tracking-widest mb-1.5">Topic / Context <span className="text-slate-300 normal-case font-normal">(optional — AI will infer from job)</span></label>
+                                            <input type="text" value={form.topic} onChange={e => setForm(f => ({...f, topic: e.target.value}))} placeholder="e.g. Build a REST API with authentication…" className="w-full border border-bdr rounded-xl px-3 py-2.5 text-sm outline-none focus:border-primary bg-white"/>
+                                        </div>
+                                    )}
+
+                                    {mode === 'manual' && (
                                         <>
-                                            <span className="material-symbols-outlined text-sm">send</span>
-                                            Dispatch to {matchingCandidates.length} Candidates
+                                            <div>
+                                                <label className="block text-[10px] font-black text-txt-muted uppercase tracking-widest mb-1.5">Assessment Title *</label>
+                                                <input type="text" value={form.title} onChange={e => setForm(f => ({...f, title: e.target.value}))} placeholder="e.g. Build a React Data Table component" className="w-full border border-bdr rounded-xl px-3 py-2.5 text-sm outline-none focus:border-primary bg-white"/>
+                                            </div>
+                                            <div>
+                                                <label className="block text-[10px] font-black text-txt-muted uppercase tracking-widest mb-1.5">Topic / Description</label>
+                                                <input type="text" value={form.topic} onChange={e => setForm(f => ({...f, topic: e.target.value}))} placeholder="Brief description of the task…" className="w-full border border-bdr rounded-xl px-3 py-2.5 text-sm outline-none focus:border-primary bg-white"/>
+                                            </div>
+                                            <div>
+                                                <label className="block text-[10px] font-black text-txt-muted uppercase tracking-widest mb-1.5">Steps <span className="text-slate-300 normal-case font-normal">(one per line)</span></label>
+                                                <textarea rows={4} value={form.steps} onChange={e => setForm(f => ({...f, steps: e.target.value}))} placeholder={"Define the function signature\nImplement the core logic\nHandle edge cases\nWrite unit tests"} className="w-full border border-bdr rounded-xl px-3 py-2.5 text-sm outline-none focus:border-primary bg-white resize-none font-mono"/>
+                                            </div>
                                         </>
                                     )}
-                                </button>
-                            </div>
+
+                                    <div className="flex gap-3 pt-2">
+                                        <button onClick={() => setMode('pick')} className="px-5 py-3 rounded-xl border border-bdr text-sm font-bold text-txt-muted hover:bg-elevated transition-all">← Back</button>
+                                        <button onClick={mode === 'manual' ? submitManual : submitAI} disabled={submitting}
+                                            className="flex-1 py-3 bg-primary hover:bg-primary-dark text-white font-black text-xs uppercase tracking-widest rounded-xl transition-all shadow-lg shadow-primary/20 disabled:opacity-60 flex items-center justify-center gap-2">
+                                            {submitting ? <><Loader className="w-4 h-4 animate-spin"/>{mode === 'ai' ? 'Generating…' : 'Creating…'}</> : mode === 'ai' ? <><Sparkles className="w-4 h-4"/>Generate with AI</> : <><Plus className="w-4 h-4"/>Create Assessment</>}
+                                        </button>
+                                    </div>
+                                </div>
+                            )}
                         </div>
                     </div>
-                </div>
-            )}
-
-            {/* Toast Notifications */}
-            {toast && (
-                <div className={`fixed bottom-8 right-8 z-[200] px-6 py-4 rounded-2xl shadow-2xl flex items-center gap-4 animate-in slide-in-from-right-10 duration-500 ${
-                    toast.type === 'success' ? 'bg-slate-900 text-white' : 'bg-red-600 text-white'
-                }`}>
-                    <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${toast.type === 'success' ? 'bg-emerald-500' : 'bg-white/20'}`}>
-                        <span className="material-symbols-outlined text-white">
-                            {toast.type === 'success' ? 'rocket_launch' : 'error'}
-                        </span>
-                    </div>
-                    <div>
-                        <p className="text-sm font-bold">{toast.message}</p>
-                        <p className="text-[10px] opacity-70 font-medium">Auto-dismissing in 5s</p>
-                    </div>
-                    <button onClick={() => setToast(null)} className="ml-4 opacity-50 hover:opacity-100 transition-opacity">
-                        <span className="material-symbols-outlined text-xl">close</span>
-                    </button>
                 </div>
             )}
         </div>

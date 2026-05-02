@@ -24,6 +24,7 @@ class CandidateResponse(CandidateBase):
     id:            int
     drive_file_id: str
     filename:      str
+    assessment_results: Optional[List[dict]] = []
     created_at:    Optional[datetime] = None
 
     class Config:

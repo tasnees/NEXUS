@@ -7,6 +7,7 @@ class SubmissionBase(BaseModel):
     candidate_email: str
     answer: str
     grade: Optional[str] = None
+    score: Optional[int] = None
     feedback: Optional[str] = None
 
 class SubmissionCreate(SubmissionBase):

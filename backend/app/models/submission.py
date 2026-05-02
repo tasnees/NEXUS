@@ -10,6 +10,7 @@ class AssessmentSubmission(Base):
     candidate_email = Column(String, index=True)
     answer = Column(Text)
     grade = Column(String, nullable=True)
+    score = Column(Integer, nullable=True)
     feedback = Column(Text, nullable=True)
     submitted_at = Column(DateTime(timezone=True), server_default=func.now())
     

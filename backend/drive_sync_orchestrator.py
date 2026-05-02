@@ -257,19 +257,29 @@ def _save_to_db(payload: dict) -> Optional[dict]:
     """Upsert the candidate profile to the database directly."""
     db = SessionLocal()
     try:
+        # Sanitize all string fields to remove NUL characters (PostgreSQL/SQLite restriction)
+        sanitized_payload = {}
+        for k, v in payload.items():
+            if isinstance(v, str):
+                sanitized_payload[k] = v.replace("\x00", "")
+            elif isinstance(v, list):
+                # Recursively sanitize lists if they contain strings
+                sanitized_payload[k] = [item.replace("\x00", "") if isinstance(item, str) else item for item in v]
+            else:
+                sanitized_payload[k] = v
+
         existing = db.query(Candidate).filter(
-            Candidate.drive_file_id == payload["drive_file_id"]
+            Candidate.drive_file_id == sanitized_payload["drive_file_id"]
         ).first()
 
         if existing:
-            for field, value in payload.items():
+            for field, value in sanitized_payload.items():
                 setattr(existing, field, value)
             db.commit()
             db.refresh(existing)
-            # Convert model to dict for backward compatibility in return
             return {"id": existing.id, "name": existing.name, "email": existing.email}
 
-        candidate = Candidate(**payload)
+        candidate = Candidate(**sanitized_payload)
         db.add(candidate)
         db.commit()
         db.refresh(candidate)

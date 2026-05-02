@@ -89,22 +89,58 @@ class ScheduleRequest(BaseModel):
     candidate_emails: Optional[List[str]] = None
 
 def send_schedule_email_task(to_email: str, job_name: str, assessment_title: str):
-    """Background task to send scheduling email."""
+    """Background task to send assessment scheduling email with Google Calendar link."""
     if not SMTP_USER or not SMTP_PASSWORD:
         print(f"SMTP credentials missing. Would have sent scheduling email to {to_email}.")
         return
 
     try:
-        msg = MIMEMultipart()
+        msg = MIMEMultipart("alternative")
         msg['From'] = SENDER_EMAIL
         msg['To'] = to_email
-        msg['Subject'] = f"📅 Schedule Your Interview: {job_name} - {assessment_title}"
+        msg['Subject'] = f"📅 Schedule Your Assessment: {assessment_title} – {job_name}"
 
-        # Google Calendar Appointment Slots link (Placeholder - replace with actual sstoken)
-        calendar_link = "https://calendar.google.com/calendar/selfsched?sstoken=https://calendar.app.google/n2JRv629z27Yb2Vq5"
-        
-        body = f"Schedule time for assessment for job {job_name}: {calendar_link}"
-        msg.attach(MIMEText(body, 'plain'))
+        calendar_link = "https://calendar.app.google/3zzaWT5e1bfgEnF97"
+
+        plain = f"""Hello,
+
+You have been invited to schedule your technical assessment for the {job_name} position.
+
+Assessment: {assessment_title}
+
+Please use the link below to pick a time that works for you:
+{calendar_link}
+
+Once you select a time, you will receive a confirmation email with your assessment portal link.
+
+Best regards,
+HireSync AI Platform
+"""
+        html = f"""
+<html><body style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;color:#0F172A">
+  <div style="background:linear-gradient(135deg,#3B82F6,#8B5CF6);padding:32px;border-radius:16px 16px 0 0;text-align:center">
+    <h1 style="color:white;margin:0;font-size:24px">📅 Schedule Your Assessment</h1>
+    <p style="color:rgba(255,255,255,0.8);margin:8px 0 0">{job_name}</p>
+  </div>
+  <div style="background:#fff;padding:32px;border:1px solid #E2E8F0;border-top:none;border-radius:0 0 16px 16px">
+    <p style="color:#475569">Hello,</p>
+    <p style="color:#475569">You have been selected to proceed with a technical assessment for the <strong>{job_name}</strong> position.</p>
+    <div style="background:#F8FAFC;border:1px solid #E2E8F0;border-radius:12px;padding:20px;margin:24px 0">
+      <p style="margin:0 0 8px;font-size:12px;font-weight:700;color:#94A3B8;text-transform:uppercase;letter-spacing:0.1em">Assessment</p>
+      <p style="margin:0;font-size:18px;font-weight:700;color:#0F172A">{assessment_title}</p>
+    </div>
+    <p style="color:#475569">Please click the button below to choose a time that works for you:</p>
+    <div style="text-align:center;margin:32px 0">
+      <a href="{calendar_link}" style="background:#3B82F6;color:white;padding:16px 32px;border-radius:12px;text-decoration:none;font-weight:700;font-size:14px;display:inline-block">
+        📅 Choose Your Assessment Time
+      </a>
+    </div>
+    <p style="color:#94A3B8;font-size:12px;text-align:center">You will receive your assessment portal link after confirming your slot.</p>
+  </div>
+</body></html>
+"""
+        msg.attach(MIMEText(plain, 'plain'))
+        msg.attach(MIMEText(html, 'html'))
 
         server = smtplib.SMTP(SMTP_SERVER, SMTP_PORT)
         server.starttls()

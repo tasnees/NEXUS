@@ -21,3 +21,4 @@ class Interview(Base):
     date = Column(DateTime)
     interview_type = Column(String) # Replaced Enum with String for simplicity in Postgres migrations
     status = Column(String, default="scheduled")
+    gcal_event_id = Column(String, nullable=True, index=True)
