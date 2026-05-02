@@ -24,3 +24,6 @@ dist-ssr/
 # Google OAuth Secrets
 backend/app/models/token.json
 backend/app/models/credentials.json
+backend/app/models/service_account.json
+*.json.key
+service_account*.json
