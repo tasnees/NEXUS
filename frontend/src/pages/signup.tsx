@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { Rocket, Shield, Check, ArrowRight, LayoutDashboard, User, Mail, Lock } from 'lucide-react';
+import { useAuth } from '../context/AuthContext';
 
 const Signup: React.FC = () => {
     const navigate = useNavigate();
@@ -13,6 +14,7 @@ const Signup: React.FC = () => {
     });
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
+    const { login } = useAuth();
 
     const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
         setFormData({
@@ -35,7 +37,10 @@ const Signup: React.FC = () => {
 
             const data = await response.json();
             if (!response.ok) throw new Error(data.detail || 'Signup failed');
-            navigate('/jobs');
+            
+            // Log in the user automatically with the returned token
+            login(data.access_token, data.user);
+            navigate('/dashboard');
         } catch (err) {
             setError(err instanceof Error ? err.message : 'An error occurred during signup');
         } finally {

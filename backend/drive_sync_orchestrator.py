@@ -51,6 +51,7 @@ from googleapiclient.http import MediaIoBaseDownload
 # Internal
 from app.services.pdf_extractor import PDFExtractor
 from app.schemas.cv_extraction import extract_resume_fields
+from app.services.assessment_dispatch_service import check_and_dispatch_assessment
 
 # ── logging ────────────────────────────────────────────────────────────────────
 logging.basicConfig(
@@ -225,6 +226,7 @@ def _extract_text(file_bytes: bytes, mime_type: str, filename: str) -> str:
 from app.config.database import SessionLocal, engine, Base
 from app.models.candidate import Candidate
 from app.models.job import Job
+from app.models.assessment import Assessment
 
 # Ensure tables exist
 Base.metadata.create_all(bind=engine)
@@ -427,6 +429,13 @@ def run_sync():
             if saved:
                 log.info("     ✅ Synced → %s", saved.get("name"))
                 processed += 1
+                
+                # --- AUTOMATED ASSESSMENT DISPATCH ---
+                db = SessionLocal()
+                try:
+                    check_and_dispatch_assessment(db, saved["id"])
+                finally:
+                    db.close()
             else:
                 failed += 1
 

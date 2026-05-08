@@ -2,12 +2,9 @@ from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
 from sqlalchemy.orm import Session
 from typing import List, Optional
 from pydantic import BaseModel
-import smtplib
-from email.mime.text import MIMEText
-from email.mime.multipart import MIMEMultipart
-import os
 import re
 from dotenv import load_dotenv
+from app.services.email_service import send_assessment_email
 
 from app.config.database import get_db
 from app.models.candidate import Candidate
@@ -16,12 +13,7 @@ router = APIRouter()
 
 load_dotenv()
 
-# Email Config (Should be in .env)
-SMTP_SERVER = os.getenv("SMTP_SERVER", "smtp.gmail.com")
-SMTP_PORT = int(os.getenv("SMTP_PORT", "587"))
-SMTP_USER = os.getenv("SMTP_USER", "")
-SMTP_PASSWORD = os.getenv("SMTP_PASSWORD", "")
-SENDER_EMAIL = os.getenv("SENDER_EMAIL", SMTP_USER)
+# Email Config moved to email_service.py
 
 class AssessmentDetails(BaseModel):
     assessment_id: str
@@ -38,49 +30,15 @@ class LaunchRequest(BaseModel):
 
 def send_email_task(to_email: str, job_name: str, assessment: AssessmentDetails):
     """Background task to send email via SMTP."""
-    if not SMTP_USER or not SMTP_PASSWORD:
-        print(f"SMTP credentials missing. Would have sent email to {to_email} for {job_name}.")
-        return
-
-    try:
-        msg = MIMEMultipart()
-        msg['From'] = SENDER_EMAIL
-        msg['To'] = to_email
-        msg['Subject'] = f"🚀 Evaluation: New Skill Assessment for {job_name}"
-
-        # Build Email Body
-        portal_link = f"http://localhost:5173/portal/assessment-portal?assessment_id={assessment.assessment_id}&email={to_email}"
-        focus_str = ", ".join(assessment.focus_areas)
-        body = f"""
-        Hello Candidate,
-
-        You are invited to complete an AI-driven proficiency assessment for the position of {job_name}.
-
-        Assessment Details:
-        - Title: {assessment.title}
-        - Description: {assessment.description}
-        - Duration: {assessment.duration}
-        - Difficulty: {assessment.difficulty}
-        - Focus Areas: {focus_str}
-
-        Please click the link below to initialize your evaluation environment:
-        {portal_link}
-
-        Good luck,
-        The NexHire AI Pipeline
-        """
-        msg.attach(MIMEText(body, 'plain'))
-
-        server = smtplib.SMTP(SMTP_SERVER, SMTP_PORT)
-        server.starttls()
-        server.login(SMTP_USER, SMTP_PASSWORD)
-        server.send_message(msg)
-        server.quit()
-        print(f"Email successfully sent to {to_email}")
-    except smtplib.SMTPAuthenticationError:
-        print(f"❌ SMTP AUTH ERROR: Username or Password rejected for {SENDER_EMAIL}. If using Gmail, please ensure you are using an 'App Password' (16 characters) and not your regular account password.")
-    except Exception as e:
-        print(f"❌ Failed to send email to {to_email}: {e}")
+    assessment_data = {
+        "id": assessment.assessment_id,
+        "title": assessment.title,
+        "description": assessment.description,
+        "duration": assessment.duration,
+        "difficulty": assessment.difficulty,
+        "focus": assessment.focus_areas
+    }
+    send_assessment_email(to_email, job_name, assessment_data)
 
 class ScheduleRequest(BaseModel):
     job_name: str

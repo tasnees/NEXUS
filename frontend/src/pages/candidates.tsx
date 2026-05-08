@@ -51,6 +51,18 @@ const Candidates: React.FC = () => {
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [isModalVisible, setIsModalVisible] = useState(false);
 
+    // Add Candidate State
+    const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+    const [isAddSubmitting, setIsAddSubmitting] = useState(false);
+    const [availableJobs, setAvailableJobs] = useState<any[]>([]);
+    const [selectedFile, setSelectedFile] = useState<File | null>(null);
+    const [addFormData, setAddFormData] = useState({
+        name: '',
+        email: '',
+        phone: '',
+        applied_job: ''
+    });
+
     // Toast state
     const [toasts, setToasts] = useState<Array<{id: number, msg: string, type: 'success' | 'danger' | 'info'}>>([]);
 
@@ -80,6 +92,17 @@ const Candidates: React.FC = () => {
         }
     };
 
+    const fetchJobs = async () => {
+        try {
+            const response = await fetch('http://localhost:8001/api/v1/jobs/');
+            if (response.ok) {
+                setAvailableJobs(await response.json());
+            }
+        } catch (err) {
+            console.error("Failed to fetch jobs", err);
+        }
+    };
+
     const handleSyncDrive = async () => {
         if (isSyncing) return;
         setIsSyncing(true);
@@ -105,10 +128,51 @@ const Candidates: React.FC = () => {
 
     useEffect(() => {
         fetchCandidates();
-        const handleGlobalSync = () => fetchCandidates();
+        fetchJobs();
+        const handleGlobalSync = () => {
+            fetchCandidates();
+            fetchJobs();
+        };
         window.addEventListener('drive-synced', handleGlobalSync);
         return () => window.removeEventListener('drive-synced', handleGlobalSync);
     }, []);
+
+    const handleAddSubmit = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!selectedFile) {
+            showToast("Please upload a CV file", "danger");
+            return;
+        }
+
+        setIsAddSubmitting(true);
+        const formData = new FormData();
+        formData.append('file', selectedFile);
+        if (addFormData.name) formData.append('name', addFormData.name);
+        if (addFormData.email) formData.append('email', addFormData.email);
+        if (addFormData.phone) formData.append('phone', addFormData.phone);
+        if (addFormData.applied_job) formData.append('applied_job', addFormData.applied_job);
+
+        try {
+            const response = await fetch('http://localhost:8001/api/v1/candidates/upload', {
+                method: 'POST',
+                body: formData,
+            });
+
+            if (response.ok) {
+                showToast("Candidate added and AI analysis started!", "success");
+                setIsAddModalOpen(false);
+                setAddFormData({ name: '', email: '', phone: '', applied_job: '' });
+                setSelectedFile(null);
+                fetchCandidates();
+            } else {
+                showToast("Failed to upload candidate", "danger");
+            }
+        } catch (err) {
+            showToast("Network error", "danger");
+        } finally {
+            setIsAddSubmitting(false);
+        }
+    };
 
     const filteredCandidates = candidates.filter(c => {
         const matchesSearch = (c.name || '').toLowerCase().includes(searchQuery.toLowerCase()) || 
@@ -193,7 +257,7 @@ const Candidates: React.FC = () => {
                             {isSyncing ? 'Syncing...' : 'Sync with Drive'}
                         </button>
                         <button 
-                            onClick={() => showToast("Add candidate form coming soon", "info")}
+                            onClick={() => setIsAddModalOpen(true)}
                             className="px-4 py-2 bg-primary hover:bg-primary-dark text-sm font-medium rounded-lg transition-all flex items-center gap-2 text-white shadow-lg shadow-primary/20"
                         >
                             <Plus className="w-4 h-4" />Add Candidate
@@ -504,6 +568,127 @@ const Candidates: React.FC = () => {
                                 <X className="w-5 h-5" />
                             </button>
                         </div>
+                    </div>
+                </div>
+            )}
+            {/* Add Candidate Modal */}
+            {isAddModalOpen && (
+                <div className="fixed inset-0 z-[110] flex items-center justify-center p-4">
+                    <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm animate-fade-in" onClick={() => !isAddSubmitting && setIsAddModalOpen(false)}></div>
+                    <div className="relative bg-white w-full max-w-lg rounded-[2rem] shadow-2xl border border-bdr overflow-hidden animate-zoom-in">
+                        {/* Header */}
+                        <div className="px-8 py-6 border-b border-bdr bg-slate-50/50 flex items-center justify-between">
+                            <div>
+                                <h3 className="text-xl font-bold text-txt-primary tracking-tight">Add New Candidate</h3>
+                                <p className="text-xs text-txt-muted font-bold uppercase tracking-wider mt-1">Manual intake portal</p>
+                            </div>
+                            <button onClick={() => setIsAddModalOpen(false)} className="p-2 hover:bg-white rounded-xl border border-transparent hover:border-bdr transition-all">
+                                <X className="w-5 h-5 text-txt-muted" />
+                            </button>
+                        </div>
+
+                        {/* Form */}
+                        <form onSubmit={handleAddSubmit} className="p-8 space-y-5">
+                            {/* File Upload */}
+                            <div className="space-y-2">
+                                <label className="text-[10px] font-black text-txt-muted uppercase tracking-[0.15em] ml-1">CV Upload (Required)</label>
+                                <div className={`relative border-2 border-dashed rounded-2xl p-8 transition-all flex flex-col items-center justify-center gap-3 ${selectedFile ? 'border-emerald-500 bg-emerald-50/10' : 'border-bdr hover:border-primary bg-slate-50/50'}`}>
+                                    <input 
+                                        type="file" 
+                                        accept=".pdf"
+                                        onChange={(e) => setSelectedFile(e.target.files?.[0] || null)}
+                                        className="absolute inset-0 opacity-0 cursor-pointer"
+                                    />
+                                    {selectedFile ? (
+                                        <>
+                                            <div className="w-12 h-12 rounded-full bg-emerald-500 text-white flex items-center justify-center shadow-lg shadow-emerald-500/20">
+                                                <CheckCircle className="w-6 h-6" />
+                                            </div>
+                                            <p className="text-xs font-bold text-emerald-600 truncate max-w-full px-4">{selectedFile.name}</p>
+                                            <button type="button" onClick={() => setSelectedFile(null)} className="text-[10px] font-bold text-txt-muted hover:text-red-500 uppercase tracking-widest">Remove File</button>
+                                        </>
+                                    ) : (
+                                        <>
+                                            <div className="w-12 h-12 rounded-full bg-primary/10 text-primary flex items-center justify-center">
+                                                <Download className="w-6 h-6" />
+                                            </div>
+                                            <div className="text-center">
+                                                <p className="text-xs font-bold text-txt-primary">Drop CV here or click to browse</p>
+                                                <p className="text-[10px] text-txt-muted mt-1 uppercase tracking-widest">Support PDF only</p>
+                                            </div>
+                                        </>
+                                    )}
+                                </div>
+                            </div>
+
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                                <div className="space-y-2">
+                                    <label className="text-[10px] font-black text-txt-muted uppercase tracking-[0.15em] ml-1">Full Name (Optional)</label>
+                                    <input 
+                                        type="text"
+                                        value={addFormData.name}
+                                        onChange={(e) => setAddFormData({...addFormData, name: e.target.value})}
+                                        placeholder="e.g. Alice Smith"
+                                        className="w-full px-4 py-3 rounded-xl border border-bdr bg-slate-50/50 focus:bg-white focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all text-sm font-medium outline-none"
+                                    />
+                                </div>
+                                <div className="space-y-2">
+                                    <label className="text-[10px] font-black text-txt-muted uppercase tracking-[0.15em] ml-1">Email (Optional)</label>
+                                    <input 
+                                        type="email"
+                                        value={addFormData.email}
+                                        onChange={(e) => setAddFormData({...addFormData, email: e.target.value})}
+                                        placeholder="alice@example.com"
+                                        className="w-full px-4 py-3 rounded-xl border border-bdr bg-slate-50/50 focus:bg-white focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all text-sm font-medium outline-none"
+                                    />
+                                </div>
+                            </div>
+
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                                <div className="space-y-2">
+                                    <label className="text-[10px] font-black text-txt-muted uppercase tracking-[0.15em] ml-1">Applied Job (Optional)</label>
+                                    <select 
+                                        value={addFormData.applied_job}
+                                        onChange={(e) => setAddFormData({...addFormData, applied_job: e.target.value})}
+                                        className="w-full px-4 py-3 rounded-xl border border-bdr bg-slate-50/50 focus:bg-white focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all text-sm font-medium outline-none appearance-none"
+                                    >
+                                        <option value="">Select a Role</option>
+                                        {availableJobs.map(job => (
+                                            <option key={job.id} value={job.title}>{job.title}</option>
+                                        ))}
+                                    </select>
+                                </div>
+                                <div className="space-y-2">
+                                    <label className="text-[10px] font-black text-txt-muted uppercase tracking-[0.15em] ml-1">Phone (Optional)</label>
+                                    <input 
+                                        type="text"
+                                        value={addFormData.phone}
+                                        onChange={(e) => setAddFormData({...addFormData, phone: e.target.value})}
+                                        placeholder="+1 234 567 890"
+                                        className="w-full px-4 py-3 rounded-xl border border-bdr bg-slate-50/50 focus:bg-white focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all text-sm font-medium outline-none"
+                                    />
+                                </div>
+                            </div>
+
+                            <div className="pt-4 flex items-center gap-3">
+                                <button 
+                                    type="button"
+                                    onClick={() => setIsAddModalOpen(false)}
+                                    disabled={isAddSubmitting}
+                                    className="flex-1 px-6 py-3.5 bg-white hover:bg-slate-50 text-txt-primary font-black text-[10px] uppercase tracking-[0.2em] rounded-2xl border border-bdr transition-all active:scale-95 disabled:opacity-50"
+                                >
+                                    Cancel
+                                </button>
+                                <button 
+                                    type="submit"
+                                    disabled={isAddSubmitting}
+                                    className="flex-[1.5] px-6 py-3.5 bg-primary hover:bg-primary-dark text-white font-black text-[10px] uppercase tracking-[0.2em] rounded-2xl shadow-xl shadow-primary/20 transition-all active:scale-95 disabled:opacity-70 flex items-center justify-center gap-2"
+                                >
+                                    {isAddSubmitting ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
+                                    {isAddSubmitting ? 'Uploading...' : 'Confirm Upload'}
+                                </button>
+                            </div>
+                        </form>
                     </div>
                 </div>
             )}

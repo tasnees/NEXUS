@@ -20,7 +20,12 @@ app = FastAPI(title="HireAI Backend")
 # CORS Configuration (Broadened for stable development)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=[
+        "http://localhost:5173",
+        "http://localhost:3000",
+        "http://localhost:8000",
+        "http://localhost:8001"
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -53,8 +58,9 @@ def run_migration():
             # Also ensure applied_job exists (added previously)
             conn.execute(text("ALTER TABLE candidates ADD COLUMN IF NOT EXISTS applied_job VARCHAR;"))
             
-            # Add gcal_event_id to interviews
+            # Add gcal_event_id and interview_mean to interviews
             conn.execute(text("ALTER TABLE interviews ADD COLUMN IF NOT EXISTS gcal_event_id VARCHAR;"))
+            conn.execute(text("ALTER TABLE interviews ADD COLUMN IF NOT EXISTS interview_mean VARCHAR;"))
             
             # Add steps to assessments
             conn.execute(text("ALTER TABLE assessments ADD COLUMN IF NOT EXISTS steps JSON DEFAULT '[]';"))

@@ -19,6 +19,7 @@ class Interview(Base):
     candidate_name = Column(String, index=True)
     role = Column(String)
     date = Column(DateTime)
-    interview_type = Column(String) # Replaced Enum with String for simplicity in Postgres migrations
+    interview_type = Column(String) 
+    interview_mean = Column(String, nullable=True)
     status = Column(String, default="scheduled")
     gcal_event_id = Column(String, nullable=True, index=True)

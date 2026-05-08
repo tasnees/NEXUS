@@ -1,11 +1,16 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
 from sqlalchemy.orm import Session
 from typing import List, Optional, Any, Dict
 from pydantic import BaseModel
+import uuid
+import io
 
 from app.config.database import get_db
 from app.models.candidate import Candidate
 from app.schemas.candidate import CandidateCreate, CandidateResponse
+from app.services.assessment_dispatch_service import check_and_dispatch_assessment
+from app.services.pdf_extractor import PDFExtractor
+from app.schemas.cv_extraction import extract_resume_fields
 
 router = APIRouter()
 
@@ -48,13 +53,77 @@ def create_or_update_candidate(payload: CandidateCreate, db: Session = Depends(g
             setattr(existing, field, value)
         db.commit()
         db.refresh(existing)
+        check_and_dispatch_assessment(db, existing.id)
         return existing
 
     candidate = Candidate(**payload.model_dump())
     db.add(candidate)
     db.commit()
     db.refresh(candidate)
+    check_and_dispatch_assessment(db, candidate.id)
     return candidate
+
+
+@router.post("/upload", response_model=CandidateResponse)
+async def upload_manual_candidate(
+    file: UploadFile = File(...),
+    name: Optional[str] = Form(None),
+    email: Optional[str] = Form(None),
+    phone: Optional[str] = Form(None),
+    applied_job: Optional[str] = Form(None),
+    db: Session = Depends(get_db)
+):
+    """
+    Handle manual CV upload. 
+    1. Extract text from file.
+    2. AI parse the text.
+    3. Apply manual overrides.
+    4. Save to DB.
+    """
+    contents = await file.read()
+    filename = file.filename
+    
+    # 1. Extract Text
+    text = ""
+    if filename.lower().endswith(".pdf"):
+        extractor = PDFExtractor(file_stream=io.BytesIO(contents))
+        text = extractor.extract_text()
+    else:
+        # Fallback for plain text or others
+        text = contents.decode("utf-8", errors="ignore")
+    
+    # 2. AI Extract
+    # We get all job titles to help the AI match
+    from app.models.job import Job
+    job_titles = [j.title for j in db.query(Job).all()]
+    extracted = extract_resume_fields(text, existing_job_titles=job_titles)
+    
+    # 3. Create Candidate Record
+    # Generate a unique "manual" drive_file_id
+    manual_id = f"manual-{uuid.uuid4()}"
+    
+    db_candidate = Candidate(
+        drive_file_id=manual_id,
+        filename=filename,
+        name=name or extracted.name or "New Candidate",
+        email=email or extracted.email,
+        phone=phone or extracted.phone,
+        summary=extracted.summary,
+        skills=extracted.skills,
+        experience=extracted.experience,
+        education=extracted.education,
+        applied_job=applied_job or extracted.applied_job,
+        raw_text=text
+    )
+    
+    db.add(db_candidate)
+    db.commit()
+    db.refresh(db_candidate)
+    
+    # 4. Trigger Assessment Flow
+    check_and_dispatch_assessment(db, db_candidate.id)
+    
+    return db_candidate
 
 
 @router.put("/{candidate_id}", response_model=CandidateResponse)

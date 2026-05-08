@@ -28,7 +28,8 @@ const Login: React.FC = () => {
             const data = await response.json();
             if (!response.ok) throw new Error(data.detail || 'Authentication failed');
 
-            login(data.role || role); 
+            // Pass token and user data to the login context function
+            login(data.access_token, data.user); 
             navigate('/dashboard');
         } catch (err) {
             setError(err instanceof Error ? err.message : 'An error occurred during login');

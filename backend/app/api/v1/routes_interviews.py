@@ -39,6 +39,7 @@ def create_interview(interview: InterviewCreate, db: Session = Depends(get_db)):
         role=interview.role,
         date=interview.date,
         interview_type=interview.interview_type,
+        interview_mean=interview.interview_mean,
         status=interview.status,
         gcal_event_id=gcal_id
     )

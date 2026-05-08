@@ -14,20 +14,13 @@ if hasattr(passlib.handlers.bcrypt, 'detect_wrap_bug'):
     # Avoid the broken internal bug check during initialization
     passlib.handlers.bcrypt.detect_wrap_bug = lambda x: False
 
+from app.core.security import create_access_token, get_password_hash, verify_password, truncate_pwd
+from app.schemas.user import UserCreate, UserResponse, UserLogin, Token
+
 router = APIRouter()
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
-def truncate_pwd(password: str) -> str:
-    # Bcrypt has a 72-byte limit. We truncate to ensure compat with bcrypt >= 4.0.0.
-    pwd_bytes = password.encode('utf-8')
-    if len(pwd_bytes) > 72:
-        # Truncate to 72 bytes and decode back to string, ignoring partial characters
-        return pwd_bytes[:72].decode('utf-8', errors='ignore')
-    return password
-
-@router.post("/signup", response_model=UserResponse)
+@router.post("/signup", response_model=Token)
 def signup(user_in: UserCreate, db: Session = Depends(get_db)):
-    # ... previous signup logic ...
     user = db.query(User).filter(User.email == user_in.email).first()
     if user:
         raise HTTPException(
@@ -35,7 +28,7 @@ def signup(user_in: UserCreate, db: Session = Depends(get_db)):
             detail="The user with this email already exists in the system",
         )
     
-    hashed_password = pwd_context.hash(truncate_pwd(user_in.password))
+    hashed_password = get_password_hash(truncate_pwd(user_in.password))
     
     db_user = User(
         name=user_in.name,
@@ -46,9 +39,15 @@ def signup(user_in: UserCreate, db: Session = Depends(get_db)):
     db.add(db_user)
     db.commit()
     db.refresh(db_user)
-    return db_user
+    
+    access_token = create_access_token(subject=db_user.user_id)
+    return {
+        "access_token": access_token,
+        "token_type": "bearer",
+        "user": db_user
+    }
 
-@router.post("/login", response_model=UserResponse)
+@router.post("/login", response_model=Token)
 def login(user_in: UserLogin, db: Session = Depends(get_db)):
     user = db.query(User).filter(User.email == user_in.email).first()
     if not user:
@@ -57,10 +56,15 @@ def login(user_in: UserLogin, db: Session = Depends(get_db)):
             detail="User not found",
         )
     
-    if not pwd_context.verify(truncate_pwd(user_in.password), user.password):
+    if not verify_password(truncate_pwd(user_in.password), user.password):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Incorrect password",
         )
     
-    return user
+    access_token = create_access_token(subject=user.user_id)
+    return {
+        "access_token": access_token,
+        "token_type": "bearer",
+        "user": user
+    }

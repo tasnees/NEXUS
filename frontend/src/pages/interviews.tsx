@@ -12,7 +12,8 @@ import {
     CheckCircle,
     AlertCircle,
     Info,
-    ExternalLink
+    ExternalLink,
+    X
 } from 'lucide-react';
 
 // --- Types ---
@@ -23,6 +24,7 @@ interface Interview {
     date: string;
     status: string;
     interview_type?: string;
+    interview_mean?: string;
 }
 
 const Interviews: React.FC = () => {
@@ -31,6 +33,22 @@ const Interviews: React.FC = () => {
     const [currentDate, setCurrentDate] = useState(new Date());
     const [loading, setLoading] = useState(true);
     const [isSyncing, setIsSyncing] = useState(false);
+    
+    // Modal & Form State
+    const [showModal, setShowModal] = useState(false);
+    const [isSubmitting, setIsSubmitting] = useState(false);
+    const [availableJobs, setAvailableJobs] = useState<any[]>([]);
+    const [allCandidates, setAllCandidates] = useState<any[]>([]);
+    const [filteredCandidates, setFilteredCandidates] = useState<any[]>([]);
+
+    const [formData, setFormData] = useState({
+        candidate_name: '',
+        role: '',
+        date: '',
+        time: '',
+        interview_type: 'Assessment',
+        interview_mean: 'Video Call'
+    });
     
     // Toast state
     const [toasts, setToasts] = useState<Array<{id: number, msg: string, type: 'success' | 'danger' | 'info'}>>([]);
@@ -59,6 +77,20 @@ const Interviews: React.FC = () => {
         }
     };
 
+    const fetchJobsAndCandidates = async () => {
+        try {
+            const [jobsRes, candidatesRes] = await Promise.all([
+                fetch('http://localhost:8001/api/v1/jobs/'),
+                fetch('http://localhost:8001/api/v1/candidates/')
+            ]);
+            
+            if (jobsRes.ok) setAvailableJobs(await jobsRes.json());
+            if (candidatesRes.ok) setAllCandidates(await candidatesRes.json());
+        } catch (err) {
+            console.error("Failed to fetch jobs/candidates", err);
+        }
+    };
+
     const handleSyncCalendar = async () => {
         if (isSyncing) return;
         setIsSyncing(true);
@@ -84,10 +116,72 @@ const Interviews: React.FC = () => {
 
     useEffect(() => {
         fetchInterviews();
-        const handleGlobalSync = () => fetchInterviews();
+        fetchJobsAndCandidates();
+        const handleGlobalSync = () => {
+            fetchInterviews();
+            fetchJobsAndCandidates();
+        };
         window.addEventListener('drive-synced', handleGlobalSync);
         return () => window.removeEventListener('drive-synced', handleGlobalSync);
     }, []);
+
+    // Filter candidates when role changes
+    useEffect(() => {
+        if (formData.role) {
+            const filtered = allCandidates.filter(c => c.applied_job === formData.role);
+            setFilteredCandidates(filtered);
+            // Reset candidate if not in filtered list
+            if (!filtered.find(c => c.name === formData.candidate_name)) {
+                setFormData(prev => ({ ...prev, candidate_name: '' }));
+            }
+        } else {
+            setFilteredCandidates([]);
+        }
+    }, [formData.role, allCandidates]);
+
+    const handleFormChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
+        const { name, value } = e.target;
+        setFormData(prev => ({ ...prev, [name]: value }));
+    };
+
+    const handleScheduleSubmit = async (e: React.FormEvent) => {
+        e.preventDefault();
+        setIsSubmitting(true);
+        
+        try {
+            // Combine date and time
+            const interviewDate = new Date(`${formData.date}T${formData.time}`);
+            
+            const payload = {
+                candidate_name: formData.candidate_name,
+                role: formData.role,
+                date: interviewDate.toISOString(),
+                interview_type: formData.interview_type,
+                interview_mean: formData.interview_mean,
+                status: 'scheduled'
+            };
+
+            const response = await fetch('http://localhost:8001/api/v1/interviews/', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+
+            if (response.ok) {
+                showToast("Interview scheduled successfully!", "success");
+                setShowModal(false);
+                setFormData({ candidate_name: '', role: '', date: '', time: '', interview_type: 'Assessment', interview_mean: 'Video Call' });
+                fetchInterviews();
+            } else {
+                showToast("Failed to schedule interview", "danger");
+            }
+        } catch (err) {
+            console.error(err);
+            showToast("Network error", "danger");
+        } finally {
+            setIsSubmitting(false);
+        }
+    };
 
     // --- Calendar Logic ---
     const daysInMonth = (year: number, month: number) => new Date(year, month + 1, 0).getDate();
@@ -168,7 +262,7 @@ const Interviews: React.FC = () => {
                             <Filter className="w-4 h-4" />Filters
                         </button>
                         <button 
-                            onClick={() => showToast("Schedule interview form coming soon", "info")}
+                            onClick={() => setShowModal(true)}
                             className="px-4 py-2 bg-primary hover:bg-primary-dark text-sm font-medium rounded-lg transition-all flex items-center gap-2 text-white shadow-lg shadow-primary/20"
                         >
                             <Plus className="w-4 h-4" />Schedule Interview
@@ -243,9 +337,11 @@ const Interviews: React.FC = () => {
                                             </div>
                                             <div className="min-w-0">
                                                 <p className="text-sm font-bold text-txt-primary truncate group-hover:text-primary transition-colors">{int.candidate_name}</p>
-                                                <p className="text-[10px] text-txt-muted truncate font-medium">{int.role}</p>
+                                                <p className="text-[10px] text-txt-muted truncate font-medium">{int.role} • {int.interview_type}</p>
                                                 <div className="flex items-center gap-1 mt-1 text-[10px] font-black text-primary">
                                                     <Clock className="w-3 h-3" /> {new Date(int.date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                                    <span className="mx-1 text-txt-faint">•</span>
+                                                    <span className="text-txt-secondary">{int.interview_mean}</span>
                                                 </div>
                                             </div>
                                             <button className="absolute right-2 top-2 opacity-0 group-hover:opacity-100 transition-opacity">
@@ -302,7 +398,7 @@ const Interviews: React.FC = () => {
             {/* Toasts */}
             <div className="fixed top-4 right-4 z-[100] space-y-2 pointer-events-none">
                 {toasts.map(t => (
-                    <div key={t.id} className="toast flex items-center gap-3 px-4 py-3 rounded-xl border shadow-2xl bg-white min-w-[280px] pointer-events-auto">
+                    <div key={t.id} className="toast flex items-center gap-3 px-4 py-3 rounded-xl border shadow-2xl bg-white min-w-[280px] pointer-events-auto animate-slide-in">
                         {t.type === 'success' && <CheckCircle className="w-5 h-5 text-emerald-500" />}
                         {t.type === 'danger' && <AlertCircle className="w-5 h-5 text-red-500" />}
                         {t.type === 'info' && <Info className="w-5 h-5 text-blue-500" />}
@@ -310,6 +406,141 @@ const Interviews: React.FC = () => {
                     </div>
                 ))}
             </div>
+
+            {/* Schedule Modal */}
+            {showModal && (
+                <div className="fixed inset-0 z-[110] flex items-center justify-center p-4">
+                    <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm animate-fade-in" onClick={() => !isSubmitting && setShowModal(false)}></div>
+                    <div className="relative bg-white w-full max-w-lg rounded-3xl shadow-2xl border border-bdr overflow-hidden animate-zoom-in">
+                        {/* Modal Header */}
+                        <div className="px-8 py-6 border-b border-bdr bg-slate-50/50 flex items-center justify-between">
+                            <div>
+                                <h3 className="text-xl font-black text-txt-primary tracking-tight">SCHEDULE INTERVIEW</h3>
+                                <p className="text-xs text-txt-muted font-bold uppercase tracking-wider mt-1">Setup a new recruitment session</p>
+                            </div>
+                            <button 
+                                onClick={() => setShowModal(false)}
+                                className="p-2 hover:bg-white rounded-xl border border-transparent hover:border-bdr transition-all"
+                            >
+                                <X className="w-5 h-5 text-txt-muted" />
+                            </button>
+                        </div>
+
+                        {/* Modal Body */}
+                        <form onSubmit={handleScheduleSubmit} className="p-8 space-y-5">
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                                <div className="space-y-2">
+                                    <label className="text-[10px] font-black text-txt-muted uppercase tracking-[0.15em] ml-1">Role / Position</label>
+                                    <select 
+                                        required
+                                        name="role"
+                                        value={formData.role}
+                                        onChange={handleFormChange}
+                                        className="w-full px-4 py-3 rounded-xl border border-bdr bg-slate-50/50 focus:bg-white focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all text-sm font-medium outline-none appearance-none"
+                                    >
+                                        <option value="">Select a Role</option>
+                                        {availableJobs.map(job => (
+                                            <option key={job.id} value={job.title}>{job.title}</option>
+                                        ))}
+                                    </select>
+                                </div>
+                                <div className="space-y-2">
+                                    <label className="text-[10px] font-black text-txt-muted uppercase tracking-[0.15em] ml-1">Candidate Name</label>
+                                    <select 
+                                        required
+                                        name="candidate_name"
+                                        value={formData.candidate_name}
+                                        onChange={handleFormChange}
+                                        disabled={!formData.role}
+                                        className="w-full px-4 py-3 rounded-xl border border-bdr bg-slate-50/50 focus:bg-white focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all text-sm font-medium outline-none appearance-none disabled:opacity-50"
+                                    >
+                                        <option value="">{formData.role ? 'Select a Candidate' : 'Select Role First'}</option>
+                                        {filteredCandidates.map(c => (
+                                            <option key={c.id} value={c.name}>{c.name}</option>
+                                        ))}
+                                    </select>
+                                </div>
+                            </div>
+
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                                <div className="space-y-2">
+                                    <label className="text-[10px] font-black text-txt-muted uppercase tracking-[0.15em] ml-1">Date</label>
+                                    <input 
+                                        required
+                                        type="date"
+                                        name="date"
+                                        value={formData.date}
+                                        onChange={handleFormChange}
+                                        className="w-full px-4 py-3 rounded-xl border border-bdr bg-slate-50/50 focus:bg-white focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all text-sm font-medium outline-none"
+                                    />
+                                </div>
+                                <div className="space-y-2">
+                                    <label className="text-[10px] font-black text-txt-muted uppercase tracking-[0.15em] ml-1">Time</label>
+                                    <input 
+                                        required
+                                        type="time"
+                                        name="time"
+                                        value={formData.time}
+                                        onChange={handleFormChange}
+                                        className="w-full px-4 py-3 rounded-xl border border-bdr bg-slate-50/50 focus:bg-white focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all text-sm font-medium outline-none"
+                                    />
+                                </div>
+                            </div>
+
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                                <div className="space-y-2">
+                                    <label className="text-[10px] font-black text-txt-muted uppercase tracking-[0.15em] ml-1">Nature of Booking</label>
+                                    <select 
+                                        name="interview_type"
+                                        value={formData.interview_type}
+                                        onChange={handleFormChange}
+                                        className="w-full px-4 py-3 rounded-xl border border-bdr bg-slate-50/50 focus:bg-white focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all text-sm font-medium outline-none appearance-none"
+                                    >
+                                        <option value="Assessment">Assessment Session</option>
+                                        <option value="Technical Interview">Technical Interview</option>
+                                        <option value="HR Screening">HR Screening</option>
+                                        <option value="Final Round">Final Round</option>
+                                        <option value="Culture Fit">Culture Fit</option>
+                                    </select>
+                                </div>
+                                <div className="space-y-2">
+                                    <label className="text-[10px] font-black text-txt-muted uppercase tracking-[0.15em] ml-1">Interview Mean</label>
+                                    <select 
+                                        name="interview_mean"
+                                        value={formData.interview_mean}
+                                        onChange={handleFormChange}
+                                        className="w-full px-4 py-3 rounded-xl border border-bdr bg-slate-50/50 focus:bg-white focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all text-sm font-medium outline-none appearance-none"
+                                    >
+                                        <option value="Video Call">Video Call</option>
+                                        <option value="Phone Call">Phone Call</option>
+                                        <option value="In-Person">In-Person</option>
+                                        <option value="On-site Day">On-site Day</option>
+                                    </select>
+                                </div>
+                            </div>
+
+                            <div className="pt-4 flex items-center gap-3">
+                                <button 
+                                    type="button"
+                                    onClick={() => setShowModal(false)}
+                                    disabled={isSubmitting}
+                                    className="flex-1 px-6 py-3.5 bg-white hover:bg-slate-50 text-txt-primary font-black text-[10px] uppercase tracking-[0.2em] rounded-2xl border border-bdr transition-all active:scale-95 disabled:opacity-50"
+                                >
+                                    Cancel
+                                </button>
+                                <button 
+                                    type="submit"
+                                    disabled={isSubmitting}
+                                    className="flex-[1.5] px-6 py-3.5 bg-primary hover:bg-primary-dark text-white font-black text-[10px] uppercase tracking-[0.2em] rounded-2xl shadow-xl shadow-primary/20 transition-all active:scale-95 disabled:opacity-70 flex items-center justify-center gap-2"
+                                >
+                                    {isSubmitting ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
+                                    {isSubmitting ? 'Scheduling...' : 'Confirm Schedule'}
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            )}
         </div>
     );
 };
