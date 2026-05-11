@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, DateTime, Enum
+from sqlalchemy import Column, Integer, String, DateTime, Enum, JSON
 from app.config.database import Base
 import enum
 
@@ -23,3 +23,7 @@ class Interview(Base):
     interview_mean = Column(String, nullable=True)
     status = Column(String, default="scheduled")
     gcal_event_id = Column(String, nullable=True, index=True)
+    candidate_email = Column(String, index=True, nullable=True)
+    meet_link = Column(String, nullable=True)
+    transcript = Column(JSON, default=list) # List of {"role": "agent/candidate", "content": "..."}
+    ai_evaluation = Column(JSON, nullable=True) # Summary of the interview performance

@@ -11,6 +11,8 @@ import Interviews from './pages/interviews';
 import Assessments from './pages/assessments';
 import AssessmentPortal from './pages/assessment_portal';
 import SubmissionSuccess from './pages/submission_success';
+import AIRecruiter from './pages/ai_recruiter';
+import InterviewPortal from './pages/interview_portal';
 import LandingPage from './pages/LandingPage';
 import MainLayout from './components/MainLayout';
 import { AuthProvider } from './context/AuthContext';
@@ -30,6 +32,8 @@ function App() {
           <Route path="/sentiment-analysis" element={<MainLayout><SentimentAnalysis /></MainLayout>} />
           <Route path="/interviews" element={<MainLayout><Interviews /></MainLayout>} />
           <Route path="/assessments" element={<MainLayout><Assessments /></MainLayout>} />
+          <Route path="/recruiter" element={<MainLayout><AIRecruiter /></MainLayout>} />
+          <Route path="/portal/interview" element={<InterviewPortal />} />
           <Route path="/portal/assessment-portal" element={<AssessmentPortal />} />
           <Route path="/portal/success" element={<SubmissionSuccess />} />
         </Routes>

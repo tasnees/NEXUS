@@ -10,6 +10,10 @@ class InterviewBase(BaseModel):
     interview_mean: Optional[str] = "Video Call"
     status: Optional[str] = "scheduled"
     gcal_event_id: Optional[str] = None
+    candidate_email: Optional[str] = None
+    meet_link: Optional[str] = None
+    transcript: Optional[list] = []
+    ai_evaluation: Optional[dict] = None
 
 class InterviewCreate(InterviewBase):
     pass
@@ -21,6 +25,8 @@ class InterviewUpdate(BaseModel):
     interview_type: Optional[str] = None
     interview_mean: Optional[str] = None
     status: Optional[str] = None
+    transcript: Optional[list] = None
+    ai_evaluation: Optional[dict] = None
 
 class InterviewResponse(InterviewBase):
     id: int

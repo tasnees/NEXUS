@@ -16,7 +16,8 @@ import {
     Search, 
     Bell,
     ExternalLink,
-    RefreshCw
+    RefreshCw,
+    Bot
 } from 'lucide-react';
 
 interface MainLayoutProps {
@@ -106,6 +107,9 @@ const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
                     </Link>
                     <Link to="/assessments" className={navClass('/assessments')}>
                         <ClipboardCheck className="w-[18px] h-[18px]" /><span>Assessments</span>
+                    </Link>
+                    <Link to="/recruiter" className={navClass('/recruiter')}>
+                        <Bot className="w-[18px] h-[18px]" /><span>AI Recruiter</span>
                     </Link>
 
                     <p className="px-3 py-2 mt-4 text-[10px] uppercase tracking-widest text-slate-500 font-medium">Insights</p>

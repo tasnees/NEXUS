@@ -10,7 +10,8 @@ import {
     Upload, 
     Sparkles,
     Check,
-    UserPlus
+    UserPlus,
+    Bot
 } from 'lucide-react';
 
 // --- Types ---
@@ -181,8 +182,8 @@ const Dashboard: React.FC = () => {
                     <button className="px-5 py-2.5 bg-white hover:bg-base text-sm font-semibold rounded-xl border border-bdr transition-all flex items-center gap-2 text-txt-primary">
                         <Upload className="w-4 h-4" />Bulk Import
                     </button>
-                    <button className="px-5 py-2.5 bg-primary hover:bg-primary-dark text-sm font-semibold rounded-xl transition-all flex items-center gap-2 text-white shadow-lg shadow-primary/20">
-                        <Sparkles className="w-4 h-4" />Run AI Vetting
+                    <button onClick={() => navigate('/recruiter')} className="px-5 py-2.5 bg-primary hover:bg-primary-dark text-sm font-semibold rounded-xl transition-all flex items-center gap-2 text-white shadow-lg shadow-primary/20">
+                        <Bot className="w-4 h-4" />Launch AI Recruiter
                     </button>
                 </div>
             </div>

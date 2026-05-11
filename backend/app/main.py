@@ -4,7 +4,7 @@ from app.config.database import engine, Base
 from app.api.v1 import (
     auth, routes_jobs, routes_candidates, routes_sync, 
     routes_interviews, routes_emails, routes_assessments, routes_submissions,
-    routes_ai
+    routes_ai, routes_recruiter, routes_interview_agent
 )
 
 # Create database tables
@@ -41,6 +41,8 @@ app.include_router(routes_emails.router, prefix="/api/v1/emails", tags=["Emails"
 app.include_router(routes_assessments.router, prefix="/api/v1/assessments", tags=["Assessments"])
 app.include_router(routes_submissions.router, prefix="/api/v1/submissions", tags=["Submissions"])
 app.include_router(routes_ai.router, prefix="/api/v1/ai", tags=["AI Integration"])
+app.include_router(routes_recruiter.router, prefix="/api/v1/recruiter", tags=["AI Recruiter"])
+app.include_router(routes_interview_agent.router, prefix="/api/v1/interview-agent", tags=["AI Interview Agent"])
 
 
 @app.get("/migrate")
@@ -59,8 +61,12 @@ def run_migration():
             conn.execute(text("ALTER TABLE candidates ADD COLUMN IF NOT EXISTS applied_job VARCHAR;"))
             
             # Add gcal_event_id and interview_mean to interviews
-            conn.execute(text("ALTER TABLE interviews ADD COLUMN IF NOT EXISTS gcal_event_id VARCHAR;"))
+            conn.execute(text("ALTER TABLE interviews ADD COLUMN IF NOT EXISTS candidate_email VARCHAR;"))
+            conn.execute(text("ALTER TABLE interviews ADD COLUMN IF NOT EXISTS transcript JSON DEFAULT '[]';"))
+            conn.execute(text("ALTER TABLE interviews ADD COLUMN IF NOT EXISTS ai_evaluation JSON;"))
             conn.execute(text("ALTER TABLE interviews ADD COLUMN IF NOT EXISTS interview_mean VARCHAR;"))
+            conn.execute(text("ALTER TABLE interviews ADD COLUMN IF NOT EXISTS meet_link VARCHAR;"))
+            conn.execute(text("ALTER TABLE interviews ADD COLUMN IF NOT EXISTS gcal_event_id VARCHAR;"))
             
             # Add steps to assessments
             conn.execute(text("ALTER TABLE assessments ADD COLUMN IF NOT EXISTS steps JSON DEFAULT '[]';"))

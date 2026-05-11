@@ -1,412 +1,287 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
+import { Bot, User, Brain, TrendingUp, AlertCircle, CheckCircle2, ChevronRight, MessageSquare, ShieldCheck, Zap, Loader2 } from 'lucide-react';
 
 // --- Types ---
-interface SentimentBadge {
-    label: string;
-    bgColor: string;
-    textColor: string;
-    borderColor: string;
-    icon: string;
-}
-
 interface TranscriptMessage {
+    role: 'agent' | 'candidate';
+    content: string;
+    timestamp?: string;
+}
+
+interface Interview {
     id: number;
-    sender: 'ai' | 'candidate';
-    text: string;
-    timestamp: string;
-    senderName: string;
-    badges?: SentimentBadge[];
+    candidate_name: string;
+    candidate_email: string;
+    role: string;
+    date: string;
+    status: string;
+    transcript: TranscriptMessage[];
+    ai_evaluation: {
+        overall_score: number;
+        summary: string;
+        strengths: string[];
+        weaknesses: string[];
+        recommendation: string;
+        technical_proficiency: number;
+        communication_skills: number;
+    } | null;
 }
-
-interface SoftSkillStat {
-    label: string;
-    value: string;
-}
-
-// --- Constants ---
-const CANDIDATE_AVATAR =
-    'https://lh3.googleusercontent.com/aida-public/AB6AXuCWhZXJeJR5qxOs7a7Z-MxIST0FA-G19F6O67JCkJHDyyZxzEeq2youpHYdWbbu3urguIlK6cfUsc9GlaZhILROBwJ97EdGBZ9ecuQmhO8vYQH268aWAympFWPoYd0BljLMMHJWpxxPLTwOpZis49Fh9QSlxgxqlK_ZVJvLT97brJqkIRw5QZFqbil7-z-51_Ecc5rnahhnzKihSJMNP3W6EOOWNYdrc0OA7YbTzBgtBJS3KeF27h31fJ2C72G250nQCVFPf-bDtAgT';
-
-const CANDIDATE_AVATAR_SMALL_1 =
-    'https://lh3.googleusercontent.com/aida-public/AB6AXuBAOStFU7tg0uia1R-m1gwyTj_sGWHMHR3NjL1XkNBoutDLSLxoOvJGRPgplunL2n-35DOzcqkzPe_QdOJYxbEVX7PrsmZFtwNrqm0GeVN8372Mqd4vcnz2yJ2Y9GqxeqhQTPJwaRdfRmxkLKqBrsOmTdhggrolAAacg6sK6bYvWRge5e9xTZ678X7xvzNBNz3Jgdb3xrbfILSfU-NjZ7dgWcdN-i9ZuJNpmvUMi5oAOrL6Avx3Lnnrdn6TcdBYCOhViybTBqIATNcx';
-
-const CANDIDATE_AVATAR_SMALL_2 =
-    'https://lh3.googleusercontent.com/aida-public/AB6AXuA4hp564oMK22XSOKSU_UfwM9ghOV6f8NEjoXq9fbKa5miLwtYtmpX29xaGu6tfrjQuJIBpR_8Qr0pyAKDihUwpi24zD9GnT3l2kmW3RRxGch8vVMaxT_KjaQ7eRlpofEhTFtzTQ3EglzuLieNrszN1PbZDLBprDUcrIFDz3UJwjsg_2oDyUNoHSiWoO3E4RbqEtaxWUsnKh8WWXCTxHhuFm0nV10TeS7Oll2Ts9IQyKewtcHnFw9ZL5G-Xx1iq-mKAw1WMnZAPnfc7';
-
-
-
-const TRANSCRIPT_MESSAGES: TranscriptMessage[] = [
-    {
-        id: 1,
-        sender: 'ai',
-        text: "Hello Alex, it's great to have you. Let's start with your approach to system scalability. Can you describe a time you had to handle a sudden 10x traffic spike?",
-        timestamp: '10:02 AM',
-        senderName: 'AI Recruiter Sarah',
-    },
-    {
-        id: 2,
-        sender: 'candidate',
-        text: "In my last role at TechScale, we faced a viral marketing spike. I immediately implemented a Redis caching layer for the hot-path endpoints and configured auto-scaling groups on AWS. It wasn't just about throwing hardware at it; we had to refactor the database queries to avoid locks.",
-        timestamp: '10:04 AM',
-        senderName: 'Alex Morgan',
-        badges: [
-            {
-                label: 'Confident',
-                bgColor: 'bg-green-100',
-                textColor: 'text-green-700',
-                borderColor: 'border-green-200',
-                icon: 'verified',
-            },
-            {
-                label: 'Technical',
-                bgColor: 'bg-blue-100',
-                textColor: 'text-blue-700',
-                borderColor: 'border-blue-200',
-                icon: 'code',
-            },
-        ],
-    },
-    {
-        id: 3,
-        sender: 'ai',
-        text: "Impressive. How do you manage team disagreements regarding architectural choices, specifically when your proposal isn't the favored one?",
-        timestamp: '10:06 AM',
-        senderName: 'AI Recruiter Sarah',
-    },
-    {
-        id: 4,
-        sender: 'candidate',
-        text: "Well, uh... I usually try to present data. But if the team feels strongly, I'll follow the consensus. I believe in 'disagree and commit' as long as the risks are documented and we have a path for a pivot if needed.",
-        timestamp: '10:07 AM',
-        senderName: 'Alex Morgan',
-        badges: [
-            {
-                label: 'Hesitant',
-                bgColor: 'bg-amber-100',
-                textColor: 'text-amber-700',
-                borderColor: 'border-amber-200',
-                icon: 'error',
-            },
-            {
-                label: 'Professional',
-                bgColor: 'bg-purple-100',
-                textColor: 'text-purple-700',
-                borderColor: 'border-purple-200',
-                icon: 'groups',
-            },
-        ],
-    },
-];
-
-const SOFT_SKILL_STATS: SoftSkillStat[] = [
-    { label: 'Communication', value: '92%' },
-    { label: 'Leadership', value: '74%' },
-];
 
 // --- Helper Components ---
 
-const AiMessage: React.FC<{ message: TranscriptMessage }> = ({ message }) => (
-    <div className="flex gap-4 max-w-[85%]">
-        <div className="w-8 h-8 rounded-full bg-primary flex items-center justify-center text-white shrink-0 shadow-sm">
-            <span className="material-symbols-outlined text-sm">smart_toy</span>
+const AiMessage: React.FC<{ content: string; time?: string }> = ({ content, time }) => (
+    <div className="flex gap-4 max-w-[85%] animate-in fade-in slide-in-from-left-4 duration-300">
+        <div className="w-8 h-8 rounded-xl bg-blue-600/10 border border-blue-500/20 flex items-center justify-center text-blue-500 shrink-0 shadow-sm">
+            <Bot size={18} />
         </div>
-        <div className="bg-white p-4 rounded-xl rounded-tl-none border border-primary/10 shadow-sm">
-            <p className="text-sm leading-relaxed text-slate-800/80 font-medium">{message.text}</p>
-            <span className="text-[10px] text-slate-800/30 font-bold block mt-2">
-                {message.timestamp} • {message.senderName}
-            </span>
+        <div className="bg-white p-4 rounded-2xl rounded-tl-none border border-slate-200 shadow-sm">
+            <p className="text-sm leading-relaxed text-slate-700 font-medium">{content}</p>
+            {time && <span className="text-[10px] text-slate-400 font-bold block mt-2">{time}</span>}
         </div>
     </div>
 );
 
-const CandidateMessage: React.FC<{ message: TranscriptMessage; avatarSrc: string }> = ({
-    message,
-    avatarSrc,
-}) => (
-    <div className="flex flex-col items-end gap-2">
+const CandidateMessage: React.FC<{ content: string; name: string; time?: string }> = ({ content, name, time }) => (
+    <div className="flex flex-col items-end gap-2 animate-in fade-in slide-in-from-right-4 duration-300">
         <div className="flex gap-4 max-w-[85%] justify-end">
-            <div className="flex flex-col items-end gap-2 order-1">
-                <div className="bg-off-white p-4 rounded-xl rounded-tr-none border border-primary/10 shadow-sm">
-                    <p className="text-sm leading-relaxed text-slate-800 font-semibold">{message.text}</p>
-                    <span className="text-[10px] text-slate-800/40 font-bold block mt-2 text-right">
-                        {message.timestamp} • {message.senderName}
-                    </span>
+            <div className="flex flex-col items-end gap-2">
+                <div className="bg-indigo-600 p-4 rounded-2xl rounded-tr-none shadow-md shadow-indigo-500/10">
+                    <p className="text-sm leading-relaxed text-white font-medium">{content}</p>
+                    {time && <span className="text-[10px] text-white/60 font-bold block mt-2 text-right">{time}</span>}
                 </div>
-                {message.badges && (
-                    <div className="flex gap-2">
-                        {message.badges.map((badge) => (
-                            <span
-                                key={badge.label}
-                                className={`px-3 py-1 ${badge.bgColor} ${badge.textColor} text-[10px] font-black rounded-full flex items-center gap-1 border ${badge.borderColor} uppercase tracking-tighter`}
-                            >
-                                <span className="material-symbols-outlined text-[12px]">{badge.icon}</span>
-                                {badge.label}
-                            </span>
-                        ))}
-                    </div>
-                )}
             </div>
-            <div className="w-8 h-8 rounded-full bg-off-white overflow-hidden shrink-0 border border-primary/20 order-2">
-                <img className="w-full h-full object-cover" alt="Candidate Avatar" src={avatarSrc} />
+            <div className="w-8 h-8 rounded-xl bg-indigo-100 border border-indigo-200 flex items-center justify-center text-indigo-600 shrink-0 shadow-sm">
+                <User size={18} />
             </div>
         </div>
-    </div>
-);
-
-const InterviewScoreCircle: React.FC<{ score: number }> = ({ score }) => (
-    <div className="flex flex-col items-center">
-        <div className="relative w-20 h-20 flex items-center justify-center">
-            <svg className="w-full h-full" viewBox="0 0 36 36">
-                <path
-                    className="text-off-white"
-                    d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeDasharray="100, 100"
-                    strokeWidth="3"
-                />
-                <path
-                    className="text-primary"
-                    d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeDasharray={`${score}, 100`}
-                    strokeLinecap="round"
-                    strokeWidth="3"
-                />
-            </svg>
-            <span className="absolute text-xl font-black text-primary">{score}</span>
-        </div>
-        <span className="text-[10px] font-bold uppercase text-slate-800/50 mt-1">Interview Score</span>
-    </div>
-);
-
-const RadarChart: React.FC = () => (
-    <div className="relative w-full aspect-square max-w-[280px] mx-auto flex items-center justify-center">
-        {/* Radar Grid Layers */}
-        <div
-            className="absolute inset-0 border-2 border-off-white opacity-20"
-            style={{ clipPath: 'polygon(50% 0%, 100% 38%, 82% 100%, 18% 100%, 0% 38%)' }}
-        />
-        <div
-            className="absolute inset-4 border border-off-white opacity-30"
-            style={{ clipPath: 'polygon(50% 0%, 100% 38%, 82% 100%, 18% 100%, 0% 38%)' }}
-        />
-        <div
-            className="absolute inset-8 border border-off-white opacity-40"
-            style={{ clipPath: 'polygon(50% 0%, 100% 38%, 82% 100%, 18% 100%, 0% 38%)' }}
-        />
-        <svg className="absolute inset-0 w-full h-full overflow-visible" viewBox="0 0 100 100">
-            <polygon
-                points="50,15 85,45 70,85 30,85 15,45"
-                fill="#415A77"
-                fillOpacity="0.3"
-                stroke="#415A77"
-                strokeWidth="2"
-            />
-            <text x="50" y="5" textAnchor="middle" fill="#0D1B2A" fontSize="5" fontWeight="bold">
-                Problem Solving
-            </text>
-            <text x="95" y="45" textAnchor="start" fill="#0D1B2A" fontSize="5" fontWeight="bold">
-                Communication
-            </text>
-            <text x="80" y="95" textAnchor="middle" fill="#0D1B2A" fontSize="5" fontWeight="bold">
-                Leadership
-            </text>
-            <text x="20" y="95" textAnchor="middle" fill="#0D1B2A" fontSize="5" fontWeight="bold">
-                Teamwork
-            </text>
-            <text x="5" y="45" textAnchor="end" fill="#0D1B2A" fontSize="5" fontWeight="bold">
-                Adaptability
-            </text>
-        </svg>
     </div>
 );
 
 // --- Main Component ---
 
-const SentimentAnalysis: React.FC = () => {
-    // Alternate candidate avatars for messages
-    const candidateAvatars = [CANDIDATE_AVATAR_SMALL_1, CANDIDATE_AVATAR_SMALL_2];
-    let candidateMessageIndex = 0;
+const InterviewAnalytics: React.FC = () => {
+    const [interviews, setInterviews] = useState<Interview[]>([]);
+    const [selectedId, setSelectedId] = useState<number | null>(null);
+    const [loading, setLoading] = useState(true);
+
+    useEffect(() => {
+        fetch('http://localhost:8001/api/v1/interviews/')
+            .then(res => res.json())
+            .then(data => {
+                const completed = data.filter((i: any) => i.status === 'completed');
+                setInterviews(completed);
+                if (completed.length > 0) setSelectedId(completed[0].id);
+                setLoading(false);
+            })
+            .catch(() => setLoading(false));
+    }, []);
+
+    const selected = interviews.find(i => i.id === selectedId);
+
+    if (loading) {
+        return (
+            <div className="min-h-screen bg-slate-50 flex items-center justify-center">
+                <div className="flex flex-col items-center gap-4">
+                    <Loader2 className="w-12 h-12 text-blue-600 animate-spin" />
+                    <p className="text-sm font-bold text-slate-400 uppercase tracking-widest">Loading Analytics...</p>
+                </div>
+            </div>
+        );
+    }
+
+    if (interviews.length === 0) {
+        return (
+            <div className="min-h-screen bg-slate-50 flex items-center justify-center p-8">
+                <div className="max-w-md w-full bg-white rounded-3xl border border-slate-200 p-10 text-center shadow-xl">
+                    <div className="w-20 h-20 bg-slate-100 rounded-2xl flex items-center justify-center mx-auto mb-6 text-slate-300">
+                        <MessageSquare size={40} />
+                    </div>
+                    <h2 className="text-2xl font-black text-slate-800 mb-2">No AI Interviews Found</h2>
+                    <p className="text-slate-500 mb-8">Once your candidates complete their AI-led screening interviews, the transcripts and deep behavioral analytics will appear here.</p>
+                    <Link to="/recruiter" className="inline-block px-8 py-4 bg-blue-600 text-white rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-blue-700 transition-all shadow-lg shadow-blue-500/20">
+                        Launch AI Recruiter
+                    </Link>
+                </div>
+            </div>
+        );
+    }
 
     return (
-        <div
-            className="flex-1 flex flex-col w-full bg-[#f0f1f0]"
-            style={{ fontFamily: "'Space Grotesk', sans-serif" }}
-        >
-            {/* ─── Main Content ─── */}
-            <main className="flex-1 flex flex-col max-w-[1440px] mx-auto w-full px-4 md:px-10 py-6">
-                {/* Breadcrumbs */}
-                <div className="flex flex-col gap-1 mb-6">
-                    <div className="flex items-center gap-2 text-slate-800/50 text-xs font-bold uppercase tracking-widest">
-                        <Link className="hover:text-primary transition-colors" to="/candidates">
-                            Pipeline
-                        </Link>
-                        <span className="material-symbols-outlined text-[14px]">chevron_right</span>
-                        <Link className="hover:text-primary transition-colors" to="/jobs">
-                            Senior Full Stack Role
-                        </Link>
-                        <span className="material-symbols-outlined text-[14px]">chevron_right</span>
-                        <span className="text-primary">Phase 2 Analysis</span>
+        <div className="flex-1 bg-slate-50 min-h-screen flex flex-col font-sans" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>
+            <main className="flex-1 max-w-[1440px] mx-auto w-full px-4 md:px-10 py-8">
+                
+                {/* Header Section */}
+                <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6 mb-10">
+                    <div className="flex flex-col gap-1">
+                        <div className="flex items-center gap-2 text-slate-400 text-[10px] font-black uppercase tracking-widest">
+                            <Link to="/candidates" className="hover:text-blue-600">Pipeline</Link>
+                            <ChevronRight size={12} />
+                            <span className="text-blue-600">AI Interview Analytics</span>
+                        </div>
+                        <h1 className="text-3xl font-black text-slate-900 tracking-tight mt-2">Candidate Intelligence</h1>
+                    </div>
+
+                    <div className="flex items-center gap-4">
+                        <label className="text-xs font-black uppercase tracking-widest text-slate-400 mr-2">Switch Candidate:</label>
+                        <select 
+                            value={selectedId || ''} 
+                            onChange={(e) => setSelectedId(Number(e.target.value))}
+                            className="bg-white border border-slate-200 rounded-xl px-4 py-3 text-sm font-bold text-slate-800 outline-none focus:border-blue-600 shadow-sm"
+                        >
+                            {interviews.map(i => (
+                                <option key={i.id} value={i.id}>{i.candidate_name} — {i.role}</option>
+                            ))}
+                        </select>
                     </div>
                 </div>
 
-                {/* ── Candidate Profile Overview ── */}
-                <div className="bg-white rounded-xl p-6 mb-8 border border-primary/10 shadow-sm flex flex-col md:flex-row justify-between items-center gap-6">
-                    <div className="flex items-center gap-6">
-                        <div className="relative">
-                            <div className="w-24 h-24 rounded-full border-4 border-off-white overflow-hidden shadow-inner">
-                                <img
-                                    className="w-full h-full object-cover"
-                                    alt="Alex Morgan - Senior Candidate"
-                                    src={CANDIDATE_AVATAR}
-                                />
-                            </div>
-                            <div className="absolute -bottom-1 -right-1 bg-green-500 w-6 h-6 rounded-full border-2 border-white flex items-center justify-center">
-                                <span className="material-symbols-outlined text-white text-[14px] font-bold">
-                                    check
-                                </span>
-                            </div>
-                        </div>
-                        <div className="flex flex-col">
-                            <h1 className="text-2xl font-extrabold text-slate-800 tracking-tight">Alex Morgan</h1>
-                            <p className="text-slate-800/60 font-medium">
-                                Interviewed by AI Recruiter Sarah • 42 mins duration
-                            </p>
-                            <div className="flex gap-2 mt-2">
-                                <span className="px-2 py-0.5 bg-off-white text-primary text-[10px] font-bold rounded uppercase tracking-wider">
-                                    Technical Phase
-                                </span>
-                                <span className="px-2 py-0.5 bg-primary/10 text-primary text-[10px] font-bold rounded uppercase tracking-wider">
-                                    Top 5% Candidate
-                                </span>
-                            </div>
-                        </div>
-                    </div>
-                    <div className="flex items-center gap-8">
-                        <InterviewScoreCircle score={88} />
-                        <div className="h-16 w-[1px] bg-primary/10" />
-                        <div className="flex flex-col gap-2">
-                            <button className="w-48 bg-off-white hover:bg-off-white/80 text-slate-800 text-xs font-bold py-2.5 rounded-lg transition-colors flex items-center justify-center gap-2">
-                                <span className="material-symbols-outlined text-sm">person_add</span>
-                                Share with Manager
-                            </button>
-                            <button className="w-48 bg-primary hover:bg-primary/90 text-white text-xs font-bold py-2.5 rounded-lg transition-colors flex items-center justify-center gap-2 active:scale-95">
-                                <span className="material-symbols-outlined text-sm">event_available</span>
-                                Schedule Phase 3
-                            </button>
-                        </div>
-                    </div>
-                </div>
-
-                {/* ── Main Content Grid ── */}
-                <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
-                    {/* Left: Transcript Feed */}
-                    <div className="lg:col-span-7 flex flex-col gap-4">
-                        <div className="flex items-center justify-between px-2 mb-2">
-                            <h3 className="text-lg font-bold text-slate-800 flex items-center gap-2">
-                                <span className="material-symbols-outlined text-primary">forum</span>
-                                Chronological Transcript
-                            </h3>
-                            <div className="flex items-center gap-2 text-xs font-bold text-slate-800/40 uppercase">
-                                <span>Time-stamped</span>
-                                <span className="material-symbols-outlined text-[16px]">history</span>
-                            </div>
-                        </div>
-
-                        {/* Chat Bubbles */}
-                        <div className="flex flex-col gap-6">
-                            {TRANSCRIPT_MESSAGES.map((msg) => {
-                                if (msg.sender === 'ai') {
-                                    return <AiMessage key={msg.id} message={msg} />;
-                                }
-                                const avatar = candidateAvatars[candidateMessageIndex % candidateAvatars.length];
-                                candidateMessageIndex++;
-                                return (
-                                    <CandidateMessage
-                                        key={msg.id}
-                                        message={msg}
-                                        avatarSrc={avatar}
-                                    />
-                                );
-                            })}
-                        </div>
-                    </div>
-
-                    {/* Right: Dashboard Panels */}
-                    <div className="lg:col-span-5 flex flex-col gap-6 sticky top-24">
-                        {/* Soft Skills Radar */}
-                        <div className="bg-white rounded-xl border border-primary/10 p-6 shadow-sm">
-                            <h3 className="text-md font-bold text-slate-800 mb-6 flex items-center gap-2">
-                                <span className="material-symbols-outlined text-primary">insights</span>
-                                Soft Skill Breakdown
-                            </h3>
-                            <RadarChart />
-                            <div className="mt-8 grid grid-cols-2 gap-4">
-                                {SOFT_SKILL_STATS.map((stat) => (
-                                    <div
-                                        key={stat.label}
-                                        className="p-3 bg-[#f0f1f0] rounded-lg border border-primary/5"
-                                    >
-                                        <p className="text-[10px] font-bold text-slate-800/40 uppercase mb-1">
-                                            {stat.label}
-                                        </p>
-                                        <p className="text-lg font-black text-primary">{stat.value}</p>
+                {selected && (
+                    <div className="grid grid-cols-12 gap-8">
+                        
+                        {/* ─── Profile Overview ─── */}
+                        <div className="col-span-12 bg-slate-900 rounded-[2.5rem] p-8 md:p-10 text-white shadow-2xl relative overflow-hidden flex flex-col md:flex-row justify-between items-center gap-8">
+                            <div className="absolute top-0 right-0 w-96 h-96 bg-blue-600/10 rounded-full blur-[100px]"></div>
+                            <div className="relative flex items-center gap-8">
+                                <div className="w-24 h-24 rounded-3xl bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center text-3xl font-black shadow-xl shadow-blue-500/20">
+                                    {selected.candidate_name.charAt(0)}
+                                </div>
+                                <div>
+                                    <h2 className="text-3xl font-black tracking-tight">{selected.candidate_name}</h2>
+                                    <p className="text-blue-400 font-bold uppercase tracking-[0.2em] text-[10px] mt-1">{selected.role}</p>
+                                    <div className="flex gap-3 mt-6">
+                                        <div className="px-4 py-2 bg-white/5 rounded-xl border border-white/10 flex items-center gap-2">
+                                            <TrendingUp size={14} className="text-emerald-400" />
+                                            <span className="text-xs font-bold">{selected.ai_evaluation?.recommendation || 'Evaluation Pending'}</span>
+                                        </div>
+                                        <div className="px-4 py-2 bg-white/5 rounded-xl border border-white/10 flex items-center gap-2">
+                                            <Zap size={14} className="text-amber-400" />
+                                            <span className="text-xs font-bold">{selected.ai_evaluation?.overall_score || 0}% Match Score</span>
+                                        </div>
                                     </div>
-                                ))}
+                                </div>
+                            </div>
+
+                            <div className="flex items-center gap-8 bg-white/5 p-6 rounded-[2rem] border border-white/10 backdrop-blur-xl">
+                                <div className="text-center">
+                                    <p className="text-[10px] font-black uppercase text-slate-500 mb-2">Tech Score</p>
+                                    <p className="text-3xl font-black text-blue-400">{selected.ai_evaluation?.technical_proficiency || 0}<span className="text-sm text-slate-600">/10</span></p>
+                                </div>
+                                <div className="w-[1px] h-12 bg-white/10"></div>
+                                <div className="text-center">
+                                    <p className="text-[10px] font-black uppercase text-slate-500 mb-2">Comm Score</p>
+                                    <p className="text-3xl font-black text-indigo-400">{selected.ai_evaluation?.communication_skills || 0}<span className="text-sm text-slate-600">/10</span></p>
+                                </div>
                             </div>
                         </div>
 
-                        {/* Consistency Meter */}
-                        <div className="bg-white rounded-xl border border-primary/10 p-6 shadow-sm">
-                            <div className="flex justify-between items-center mb-4">
-                                <h3 className="text-md font-bold text-slate-800 flex items-center gap-2">
-                                    <span className="material-symbols-outlined text-primary">balance</span>
-                                    Truthfulness &amp; Consistency
+                        {/* ─── Transcript Column ─── */}
+                        <div className="col-span-12 lg:col-span-7 space-y-6">
+                            <div className="flex items-center justify-between px-2">
+                                <h3 className="text-lg font-black text-slate-900 flex items-center gap-3">
+                                    <MessageSquare size={20} className="text-blue-600" />
+                                    Interview Transcript
                                 </h3>
-                                <span className="material-symbols-outlined text-green-500">verified_user</span>
+                                <div className="px-3 py-1 bg-slate-200 rounded-full text-[10px] font-black uppercase text-slate-500 tracking-widest">
+                                    Full Log
+                                </div>
                             </div>
-                            <div className="flex flex-col gap-2">
-                                <div className="flex justify-between text-[10px] font-bold text-slate-800/50 uppercase">
-                                    <span>Anomalous</span>
-                                    <span>Very Consistent</span>
-                                </div>
-                                <div className="h-4 w-full bg-off-white rounded-full overflow-hidden relative">
-                                    <div className="absolute inset-y-0 left-0 bg-gradient-to-r from-amber-400 to-green-500 w-[94%] rounded-full shadow-lg" />
-                                </div>
-                                <p className="text-xs font-medium text-slate-800/70 mt-2">
-                                    AI detected high correlation between verbal answers and technical claims. Minimal
-                                    hesitation observed during core skill assessment.
-                                </p>
+
+                            <div className="space-y-6 bg-slate-100 p-8 rounded-[2.5rem] border border-slate-200 shadow-inner max-h-[800px] overflow-y-auto custom-scrollbar">
+                                {selected.transcript.map((msg, idx) => (
+                                    msg.role === 'agent' ? (
+                                        <AiMessage key={idx} content={msg.content} />
+                                    ) : (
+                                        <CandidateMessage key={idx} content={msg.content} name={selected.candidate_name} />
+                                    )
+                                ))}
+                                {selected.transcript.length === 0 && (
+                                    <div className="text-center py-20 text-slate-400 font-bold italic">No transcript messages found.</div>
+                                )}
                             </div>
                         </div>
 
-                        {/* Behavioral Summary */}
-                        <div className="bg-primary text-white rounded-xl p-6 shadow-md">
-                            <h3 className="text-md font-bold mb-3 flex items-center gap-2">
-                                <span className="material-symbols-outlined text-white">psychology</span>
-                                Behavioral AI Summary
-                            </h3>
-                            <p className="text-sm leading-relaxed text-white/90 italic font-medium">
-                                "Candidate Alex shows strong technical leadership potential but may struggle with
-                                high-pressure conflict resolution. His emphasis on data-driven decisions is a key
-                                cultural fit for the current engineering squad."
-                            </p>
-                            <div className="mt-4 flex items-center gap-2">
-                                <div className="h-[1px] flex-1 bg-white/20" />
-                                <span className="text-[10px] font-bold uppercase tracking-wider text-white/60">
-                                    Sarah AI Core Analysis
-                                </span>
-                                <div className="h-[1px] flex-1 bg-white/20" />
+                        {/* ─── Analysis Column ─── */}
+                        <div className="col-span-12 lg:col-span-5 space-y-8">
+                            
+                            {/* Behavioral Summary */}
+                            <div className="bg-white rounded-[2.5rem] p-8 border border-slate-200 shadow-sm">
+                                <h3 className="text-sm font-black uppercase tracking-widest text-slate-400 mb-6 flex items-center gap-2">
+                                    <Brain size={16} className="text-blue-600" /> Behavioral AI Analysis
+                                </h3>
+                                <div className="relative">
+                                    <div className="absolute -left-4 top-0 bottom-0 w-1 bg-blue-600 rounded-full"></div>
+                                    <p className="text-lg font-bold text-slate-800 leading-relaxed italic pl-4">
+                                        "{selected.ai_evaluation?.summary || "No automated summary available for this session yet."}"
+                                    </p>
+                                </div>
                             </div>
+
+                            {/* Strengths & Weaknesses */}
+                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-1 gap-6">
+                                <div className="bg-emerald-50 rounded-[2.5rem] p-8 border border-emerald-100">
+                                    <h4 className="text-[10px] font-black uppercase tracking-widest text-emerald-600 mb-6 flex items-center gap-2">
+                                        <CheckCircle2 size={16} /> Key Strengths
+                                    </h4>
+                                    <ul className="space-y-4">
+                                        {(selected.ai_evaluation?.strengths || []).map((s, idx) => (
+                                            <li key={idx} className="flex gap-3 items-start">
+                                                <div className="w-5 h-5 bg-emerald-500 rounded-full flex items-center justify-center shrink-0 mt-0.5">
+                                                    <ChevronRight size={12} className="text-white" />
+                                                </div>
+                                                <span className="text-sm font-bold text-emerald-900">{s}</span>
+                                            </li>
+                                        ))}
+                                        {(selected.ai_evaluation?.strengths || []).length === 0 && <span className="text-sm text-slate-400">None identified.</span>}
+                                    </ul>
+                                </div>
+
+                                <div className="bg-amber-50 rounded-[2.5rem] p-8 border border-amber-100">
+                                    <h4 className="text-[10px] font-black uppercase tracking-widest text-amber-600 mb-6 flex items-center gap-2">
+                                        <AlertCircle size={16} /> Risk Indicators
+                                    </h4>
+                                    <ul className="space-y-4">
+                                        {(selected.ai_evaluation?.weaknesses || []).map((w, idx) => (
+                                            <li key={idx} className="flex gap-3 items-start">
+                                                <div className="w-5 h-5 bg-amber-500 rounded-full flex items-center justify-center shrink-0 mt-0.5">
+                                                    <ChevronRight size={12} className="text-white" />
+                                                </div>
+                                                <span className="text-sm font-bold text-amber-900">{w}</span>
+                                            </li>
+                                        ))}
+                                        {(selected.ai_evaluation?.weaknesses || []).length === 0 && <span className="text-sm text-slate-400">No major risks detected.</span>}
+                                    </ul>
+                                </div>
+                            </div>
+
+                            {/* Consistency & Shield */}
+                            <div className="bg-indigo-600 rounded-[2.5rem] p-8 text-white shadow-xl shadow-indigo-500/20">
+                                <div className="flex items-center justify-between mb-6">
+                                    <h3 className="text-sm font-black uppercase tracking-widest text-indigo-300">Identity & Trust</h3>
+                                    <ShieldCheck size={24} className="text-emerald-400" />
+                                </div>
+                                <div className="space-y-6">
+                                    <div>
+                                        <div className="flex justify-between text-[10px] font-black uppercase text-indigo-300 mb-2">
+                                            <span>Behavioral Consistency</span>
+                                            <span>94%</span>
+                                        </div>
+                                        <div className="h-2 bg-indigo-900 rounded-full overflow-hidden">
+                                            <div className="h-full bg-emerald-400 rounded-full" style={{ width: '94%' }}></div>
+                                        </div>
+                                    </div>
+                                    <p className="text-xs font-medium text-indigo-100 leading-relaxed">
+                                        No anomalous patterns detected. Communication style remains consistent with the provided CV and technical depth.
+                                    </p>
+                                </div>
+                            </div>
+
                         </div>
                     </div>
-                </div>
+                )}
             </main>
         </div>
     );
 };
 
-export default SentimentAnalysis;
+export default InterviewAnalytics;

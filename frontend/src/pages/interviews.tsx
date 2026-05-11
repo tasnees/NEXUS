@@ -13,7 +13,8 @@ import {
     AlertCircle,
     Info,
     ExternalLink,
-    X
+    X,
+    Trash2
 } from 'lucide-react';
 
 // --- Types ---
@@ -25,6 +26,7 @@ interface Interview {
     status: string;
     interview_type?: string;
     interview_mean?: string;
+    meet_link?: string;
 }
 
 const Interviews: React.FC = () => {
@@ -40,6 +42,9 @@ const Interviews: React.FC = () => {
     const [availableJobs, setAvailableJobs] = useState<any[]>([]);
     const [allCandidates, setAllCandidates] = useState<any[]>([]);
     const [filteredCandidates, setFilteredCandidates] = useState<any[]>([]);
+    const [selectedInterview, setSelectedInterview] = useState<Interview | null>(null);
+    const [showDetailsModal, setShowDetailsModal] = useState(false);
+    const [isEditing, setIsEditing] = useState(false);
 
     const [formData, setFormData] = useState({
         candidate_name: '',
@@ -47,7 +52,8 @@ const Interviews: React.FC = () => {
         date: '',
         time: '',
         interview_type: 'Assessment',
-        interview_mean: 'Video Call'
+        interview_mean: 'Video Call',
+        meet_link: ''
     });
     
     // Toast state
@@ -144,6 +150,27 @@ const Interviews: React.FC = () => {
         setFormData(prev => ({ ...prev, [name]: value }));
     };
 
+    const handleInterviewClick = (interview: Interview) => {
+        setSelectedInterview(interview);
+        setShowDetailsModal(true);
+        setIsEditing(false);
+    };
+
+    const handleEditClick = () => {
+        if (!selectedInterview) return;
+        const dateObj = new Date(selectedInterview.date);
+        setFormData({
+            candidate_name: selectedInterview.candidate_name,
+            role: selectedInterview.role,
+            date: dateObj.toISOString().split('T')[0],
+            time: dateObj.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false }),
+            interview_type: selectedInterview.interview_type || 'Assessment',
+            interview_mean: selectedInterview.interview_mean || 'Video Call',
+            meet_link: selectedInterview.meet_link || ''
+        });
+        setIsEditing(true);
+    };
+
     const handleScheduleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         setIsSubmitting(true);
@@ -158,22 +185,54 @@ const Interviews: React.FC = () => {
                 date: interviewDate.toISOString(),
                 interview_type: formData.interview_type,
                 interview_mean: formData.interview_mean,
+                meet_link: formData.meet_link,
                 status: 'scheduled'
             };
 
-            const response = await fetch('http://localhost:8001/api/v1/interviews/', {
-                method: 'POST',
+            const response = await fetch(`http://localhost:8001/api/v1/interviews/${isEditing ? selectedInterview?.id : ''}`, {
+                method: isEditing ? 'PUT' : 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(payload)
             });
 
             if (response.ok) {
-                showToast("Interview scheduled successfully!", "success");
+                showToast(isEditing ? "Interview updated successfully!" : "Interview scheduled successfully!", "success");
                 setShowModal(false);
-                setFormData({ candidate_name: '', role: '', date: '', time: '', interview_type: 'Assessment', interview_mean: 'Video Call' });
+                setIsEditing(false);
+                setShowDetailsModal(false);
+                setFormData({ candidate_name: '', role: '', date: '', time: '', interview_type: 'Assessment', interview_mean: 'Video Call', meet_link: '' });
                 fetchInterviews();
             } else {
-                showToast("Failed to schedule interview", "danger");
+                showToast("Failed to save interview", "danger");
+            }
+        } catch (err) {
+            console.error(err);
+            showToast("Network error", "danger");
+        } finally {
+            setIsSubmitting(false);
+        }
+    };
+
+    const handleDeleteInterview = async () => {
+        if (!selectedInterview) return;
+        
+        if (!window.confirm(`Are you sure you want to cancel the interview for ${selectedInterview.candidate_name}? This will also remove it from Google Calendar.`)) {
+            return;
+        }
+
+        setIsSubmitting(true);
+        try {
+            const response = await fetch(`http://localhost:8001/api/v1/interviews/${selectedInterview.id}`, {
+                method: 'DELETE'
+            });
+
+            if (response.ok) {
+                showToast("Interview cancelled and removed from calendar", "success");
+                setShowDetailsModal(false);
+                setSelectedInterview(null);
+                fetchInterviews();
+            } else {
+                showToast("Failed to delete interview", "danger");
             }
         } catch (err) {
             console.error(err);
@@ -219,6 +278,10 @@ const Interviews: React.FC = () => {
                         {dayInterviews.map(int => (
                             <div 
                                 key={int.id} 
+                                onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleInterviewClick(int);
+                                }}
                                 className="px-2 py-1.5 bg-primary/5 border border-primary/10 rounded-lg text-[9px] font-bold text-primary truncate hover:bg-primary/10 transition-colors cursor-pointer flex items-center gap-1"
                             >
                                 <div className="w-1 h-1 rounded-full bg-primary"></div>
@@ -331,7 +394,11 @@ const Interviews: React.FC = () => {
                                     </div>
                                 ) : (
                                     todayInterviews.map(int => (
-                                        <div key={int.id} className="flex gap-4 p-3 rounded-2xl border border-slate-50 bg-slate-50/30 hover:border-primary/30 transition-all group cursor-pointer relative overflow-hidden">
+                                        <div 
+                                            key={int.id} 
+                                            onClick={() => handleInterviewClick(int)}
+                                            className="flex gap-4 p-3 rounded-2xl border border-slate-50 bg-slate-50/30 hover:border-primary/30 transition-all group cursor-pointer relative overflow-hidden"
+                                        >
                                             <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center text-primary group-hover:bg-primary group-hover:text-white transition-all">
                                                 <Video className="w-5 h-5" />
                                             </div>
@@ -344,9 +411,18 @@ const Interviews: React.FC = () => {
                                                     <span className="text-txt-secondary">{int.interview_mean}</span>
                                                 </div>
                                             </div>
-                                            <button className="absolute right-2 top-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                                                <ExternalLink className="w-3 h-3 text-txt-faint hover:text-primary" />
-                                            </button>
+                                            {int.meet_link && (
+                                                <button 
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        window.open(int.meet_link, '_blank');
+                                                    }}
+                                                    className="absolute right-2 top-2 opacity-0 group-hover:opacity-100 transition-opacity p-2 bg-primary/10 rounded-lg hover:bg-primary hover:text-white"
+                                                    title="Launch Google Meet"
+                                                >
+                                                    <ExternalLink className="w-3.5 h-3.5" />
+                                                </button>
+                                            )}
                                         </div>
                                     ))
                                 )}
@@ -519,6 +595,28 @@ const Interviews: React.FC = () => {
                                 </div>
                             </div>
 
+                            {formData.interview_mean === 'Video Call' && (
+                                <div className="space-y-2 animate-fade-in">
+                                    <label className="text-[10px] font-black text-txt-muted uppercase tracking-[0.15em] ml-1">Manual Meeting Link (Optional)</label>
+                                    <div className="relative group">
+                                        <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-txt-faint group-focus-within:text-primary transition-colors">
+                                            <ExternalLink className="w-4 h-4" />
+                                        </div>
+                                        <input 
+                                            type="url"
+                                            name="meet_link"
+                                            placeholder="https://meet.google.com/abc-defg-hij"
+                                            value={formData.meet_link}
+                                            onChange={handleFormChange}
+                                            className="w-full pl-11 pr-4 py-3 rounded-xl border border-bdr bg-slate-50/50 focus:bg-white focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all text-sm font-medium outline-none placeholder:text-txt-faint/50"
+                                        />
+                                    </div>
+                                    <p className="text-[9px] text-txt-faint font-bold uppercase tracking-wider ml-1 mt-1">
+                                        Leave empty to attempt automated Google Meet generation
+                                    </p>
+                                </div>
+                            )}
+
                             <div className="pt-4 flex items-center gap-3">
                                 <button 
                                     type="button"
@@ -538,6 +636,268 @@ const Interviews: React.FC = () => {
                                 </button>
                             </div>
                         </form>
+                    </div>
+                </div>
+            )}
+            {/* Interview Details Modal */}
+            {showDetailsModal && selectedInterview && (
+                <div className="fixed inset-0 z-[120] flex items-center justify-center p-4">
+                    <div className="absolute inset-0 bg-slate-900/70 backdrop-blur-md animate-fade-in" onClick={() => setShowDetailsModal(false)}></div>
+                    <div className="relative bg-white w-full max-w-lg rounded-[2.5rem] shadow-2xl border border-bdr overflow-hidden animate-zoom-in">
+                        {/* Header with Background Pattern */}
+                        <div className="h-24 bg-primary relative overflow-hidden">
+                            <div className="absolute inset-0 opacity-20 pointer-events-none">
+                                <div className="absolute top-0 left-0 w-full h-full bg-[radial-gradient(circle_at_20%_20%,_var(--tw-gradient-stops))] from-white/40 to-transparent"></div>
+                                <div className="grid grid-cols-6 gap-2 rotate-12 -mt-10">
+                                    {[...Array(24)].map((_, i) => (
+                                        <div key={i} className="h-10 border-l border-white/20"></div>
+                                    ))}
+                                </div>
+                            </div>
+                            <button 
+                                onClick={() => setShowDetailsModal(false)}
+                                className="absolute top-6 right-6 p-2 bg-black/10 hover:bg-black/20 text-white rounded-full transition-all z-10"
+                            >
+                                <X className="w-5 h-5" />
+                            </button>
+                        </div>
+
+                        {/* Content */}
+                        <div className="px-10 pb-10 -mt-12 relative z-10">
+                            {isEditing ? (
+                                <form onSubmit={handleScheduleSubmit} className="pt-16 space-y-5">
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                                        <div className="space-y-2">
+                                            <label className="text-[10px] font-black text-txt-muted uppercase tracking-[0.15em] ml-1">Role / Position</label>
+                                            <select 
+                                                required
+                                                name="role"
+                                                value={formData.role}
+                                                onChange={handleFormChange}
+                                                className="w-full px-4 py-3 rounded-xl border border-bdr bg-slate-50/50 focus:bg-white focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all text-sm font-medium outline-none appearance-none"
+                                            >
+                                                <option value="">Select a Role</option>
+                                                {availableJobs.map(job => (
+                                                    <option key={job.id} value={job.title}>{job.title}</option>
+                                                ))}
+                                            </select>
+                                        </div>
+                                        <div className="space-y-2">
+                                            <label className="text-[10px] font-black text-txt-muted uppercase tracking-[0.15em] ml-1">Candidate Name</label>
+                                            <select 
+                                                required
+                                                name="candidate_name"
+                                                value={formData.candidate_name}
+                                                onChange={handleFormChange}
+                                                disabled={!formData.role}
+                                                className="w-full px-4 py-3 rounded-xl border border-bdr bg-slate-50/50 focus:bg-white focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all text-sm font-medium outline-none appearance-none disabled:opacity-50"
+                                            >
+                                                <option value="">{formData.role ? 'Select a Candidate' : 'Select Role First'}</option>
+                                                {filteredCandidates.map(c => (
+                                                    <option key={c.id} value={c.name}>{c.name}</option>
+                                                ))}
+                                            </select>
+                                        </div>
+                                    </div>
+
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                                        <div className="space-y-2">
+                                            <label className="text-[10px] font-black text-txt-muted uppercase tracking-[0.15em] ml-1">Date</label>
+                                            <input 
+                                                required
+                                                type="date"
+                                                name="date"
+                                                value={formData.date}
+                                                onChange={handleFormChange}
+                                                className="w-full px-4 py-3 rounded-xl border border-bdr bg-slate-50/50 focus:bg-white focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all text-sm font-medium outline-none"
+                                            />
+                                        </div>
+                                        <div className="space-y-2">
+                                            <label className="text-[10px] font-black text-txt-muted uppercase tracking-[0.15em] ml-1">Time</label>
+                                            <input 
+                                                required
+                                                type="time"
+                                                name="time"
+                                                value={formData.time}
+                                                onChange={handleFormChange}
+                                                className="w-full px-4 py-3 rounded-xl border border-bdr bg-slate-50/50 focus:bg-white focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all text-sm font-medium outline-none"
+                                            />
+                                        </div>
+                                    </div>
+
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                                        <div className="space-y-2">
+                                            <label className="text-[10px] font-black text-txt-muted uppercase tracking-[0.15em] ml-1">Interview Type</label>
+                                            <select 
+                                                name="interview_type"
+                                                value={formData.interview_type}
+                                                onChange={handleFormChange}
+                                                className="w-full px-4 py-3 rounded-xl border border-bdr bg-slate-50/50 focus:bg-white focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all text-sm font-medium outline-none appearance-none"
+                                            >
+                                                <option value="Assessment">Assessment Session</option>
+                                                <option value="Technical Interview">Technical Interview</option>
+                                                <option value="HR Screening">HR Screening</option>
+                                                <option value="Final Round">Final Round</option>
+                                                <option value="Culture Fit">Culture Fit</option>
+                                            </select>
+                                        </div>
+                                        <div className="space-y-2">
+                                            <label className="text-[10px] font-black text-txt-muted uppercase tracking-[0.15em] ml-1">Medium</label>
+                                            <select 
+                                                name="interview_mean"
+                                                value={formData.interview_mean}
+                                                onChange={handleFormChange}
+                                                className="w-full px-4 py-3 rounded-xl border border-bdr bg-slate-50/50 focus:bg-white focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all text-sm font-medium outline-none appearance-none"
+                                            >
+                                                <option value="Video Call">Video Call</option>
+                                                <option value="Phone Call">Phone Call</option>
+                                                <option value="In-Person">In-Person</option>
+                                                <option value="On-site Day">On-site Day</option>
+                                            </select>
+                                        </div>
+                                    </div>
+
+                                    {formData.interview_mean === 'Video Call' && (
+                                        <div className="space-y-2 animate-fade-in">
+                                            <label className="text-[10px] font-black text-txt-muted uppercase tracking-[0.15em] ml-1">Manual Meeting Link</label>
+                                            <input 
+                                                type="url"
+                                                name="meet_link"
+                                                value={formData.meet_link}
+                                                onChange={handleFormChange}
+                                                className="w-full px-4 py-3 rounded-xl border border-bdr bg-slate-50/50 focus:bg-white focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all text-sm font-medium outline-none"
+                                            />
+                                        </div>
+                                    )}
+
+                                    <div className="pt-4 flex gap-3">
+                                        <button 
+                                            type="button" 
+                                            onClick={() => setIsEditing(false)}
+                                            className="flex-1 py-3.5 bg-white text-txt-primary border border-bdr rounded-2xl font-black text-[10px] uppercase tracking-widest hover:bg-slate-50 transition-all"
+                                        >
+                                            Back to Details
+                                        </button>
+                                        <button 
+                                            type="submit"
+                                            disabled={isSubmitting}
+                                            className="flex-[1.5] py-3.5 bg-primary text-white rounded-2xl font-black text-[10px] uppercase tracking-widest hover:bg-primary-dark transition-all flex items-center justify-center gap-2"
+                                        >
+                                            {isSubmitting ? <RefreshCw className="w-4 h-4 animate-spin" /> : <CheckCircle className="w-4 h-4" />}
+                                            Save Changes
+                                        </button>
+                                    </div>
+                                </form>
+                            ) : (
+                                <>
+                                    <div className="w-24 h-24 rounded-3xl bg-white border-4 border-white shadow-xl flex items-center justify-center text-primary mb-6">
+                                        <div className="w-20 h-20 rounded-2xl bg-primary/10 flex items-center justify-center">
+                                            <Video className="w-10 h-10" />
+                                        </div>
+                                    </div>
+
+                                    <div className="mb-8 flex items-start justify-between">
+                                        <div>
+                                            <div className="flex items-center gap-3 mb-1">
+                                                <h3 className="text-2xl font-black text-txt-primary tracking-tight">{selectedInterview.candidate_name}</h3>
+                                                <span className={`px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest ${
+                                                    selectedInterview.status === 'scheduled' ? 'bg-primary/10 text-primary' : 'bg-emerald-100 text-emerald-600'
+                                                }`}>
+                                                    {selectedInterview.status}
+                                                </span>
+                                            </div>
+                                            <p className="text-base font-bold text-txt-muted">{selectedInterview.role}</p>
+                                        </div>
+                                        <button 
+                                            onClick={handleEditClick}
+                                            className="p-3 bg-slate-50 hover:bg-slate-100 text-txt-muted hover:text-primary rounded-2xl border border-slate-100 transition-all"
+                                            title="Edit Interview"
+                                        >
+                                            <Filter className="w-5 h-5 rotate-90" />
+                                        </button>
+                                    </div>
+
+                                    <div className="grid grid-cols-2 gap-6 mb-8">
+                                        <div className="p-4 rounded-2xl bg-slate-50/80 border border-slate-100">
+                                            <div className="flex items-center gap-2 text-txt-muted mb-2">
+                                                <CalendarIcon className="w-4 h-4" />
+                                                <span className="text-[10px] font-black uppercase tracking-widest">Date</span>
+                                            </div>
+                                            <p className="text-sm font-bold text-txt-primary">
+                                                {new Date(selectedInterview.date).toLocaleDateString('default', { month: 'long', day: 'numeric', year: 'numeric' })}
+                                            </p>
+                                        </div>
+                                        <div className="p-4 rounded-2xl bg-slate-50/80 border border-slate-100">
+                                            <div className="flex items-center gap-2 text-txt-muted mb-2">
+                                                <Clock className="w-4 h-4" />
+                                                <span className="text-[10px] font-black uppercase tracking-widest">Time</span>
+                                            </div>
+                                            <p className="text-sm font-bold text-txt-primary">
+                                                {new Date(selectedInterview.date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                            </p>
+                                        </div>
+                                        <div className="p-4 rounded-2xl bg-slate-50/80 border border-slate-100">
+                                            <div className="flex items-center gap-2 text-txt-muted mb-2">
+                                                <Info className="w-4 h-4" />
+                                                <span className="text-[10px] font-black uppercase tracking-widest">Type</span>
+                                            </div>
+                                            <p className="text-sm font-bold text-txt-primary">{selectedInterview.interview_type || 'N/A'}</p>
+                                        </div>
+                                        <div className="p-4 rounded-2xl bg-slate-50/80 border border-slate-100">
+                                            <div className="flex items-center gap-2 text-txt-muted mb-2">
+                                                <Filter className="w-4 h-4" />
+                                                <span className="text-[10px] font-black uppercase tracking-widest">Medium</span>
+                                            </div>
+                                            <p className="text-sm font-bold text-txt-primary">{selectedInterview.interview_mean || 'N/A'}</p>
+                                        </div>
+                                    </div>
+
+                                    {selectedInterview.meet_link ? (
+                                        <div className="space-y-3">
+                                            <div className="flex items-center justify-between">
+                                                <span className="text-[10px] font-black text-txt-muted uppercase tracking-widest">Google Meet Connection</span>
+                                                <CheckCircle className="w-4 h-4 text-emerald-500" />
+                                            </div>
+                                            <div className="flex gap-3">
+                                                <button 
+                                                    onClick={() => window.open(selectedInterview.meet_link, '_blank')}
+                                                    className="flex-1 py-4 bg-primary hover:bg-primary-dark text-white rounded-2xl font-black text-[11px] uppercase tracking-[0.2em] shadow-xl shadow-primary/20 transition-all flex items-center justify-center gap-3 active:scale-[0.98]"
+                                                >
+                                                    <ExternalLink className="w-5 h-5" />
+                                                    Join Video Call
+                                                </button>
+                                                <button 
+                                                    onClick={handleDeleteInterview}
+                                                    disabled={isSubmitting}
+                                                    className="px-6 py-4 bg-white hover:bg-red-50 text-red-500 rounded-2xl border border-bdr hover:border-red-200 transition-all active:scale-[0.98] disabled:opacity-50"
+                                                    title="Cancel Interview"
+                                                >
+                                                    <Trash2 className="w-5 h-5" />
+                                                </button>
+                                            </div>
+                                        </div>
+                                    ) : (
+                                        <div className="space-y-4">
+                                            <div className="p-6 rounded-3xl bg-slate-50 border border-dashed border-slate-200 text-center">
+                                                <div className="w-12 h-12 bg-white rounded-full flex items-center justify-center mx-auto mb-3 shadow-sm">
+                                                    <AlertCircle className="w-6 h-6 text-txt-faint" />
+                                                </div>
+                                                <p className="text-sm font-bold text-txt-muted">No Meet link generated yet.</p>
+                                                <p className="text-[10px] text-txt-faint mt-1">Check your calendar sync or permissions.</p>
+                                            </div>
+                                            <button 
+                                                onClick={handleDeleteInterview}
+                                                disabled={isSubmitting}
+                                                className="w-full py-4 bg-white hover:bg-red-50 text-red-500 rounded-2xl border border-bdr hover:border-red-200 font-black text-[11px] uppercase tracking-[0.2em] transition-all flex items-center justify-center gap-3 active:scale-[0.98] disabled:opacity-50"
+                                            >
+                                                <Trash2 className="w-5 h-5" />
+                                                Cancel Interview
+                                            </button>
+                                        </div>
+                                    )}
+                                </>
+                            )}
+                        </div>
                     </div>
                 </div>
             )}

@@ -168,6 +168,24 @@ def create_gcal_event(interview_data: dict):
         
         end_time = start_time + timedelta(hours=1)
         
+        # Fetch allowed conference types for this calendar to avoid 400 Bad Request
+        allowed_types = []
+        try:
+            cal_meta = service.calendars().get(calendarId=target_calendar).execute()
+            allowed_types = cal_meta.get('conferenceProperties', {}).get('allowedConferenceSolutionTypes', [])
+        except:
+            pass
+
+        # Case-insensitive check for Video Call
+        is_video = False
+        mean = str(interview_data.get('interview_mean', '')).lower()
+        if 'video' in mean or 'meet' in mean or 'zoom' in mean:
+            is_video = True
+        
+        # Only request conference if 'hangoutsMeet' or 'googleMeet' is allowed
+        # Fallback: if list is empty but it's a video call, we try hangoutsMeet once and catch error
+        request_conference = is_video and ('hangoutsMeet' in allowed_types or not allowed_types)
+
         event = {
             'summary': f"Interview: {interview_data['candidate_name']} <> NEXUS",
             'description': f"Role: {interview_data['role']}\nType: {interview_data['interview_type']}",
@@ -180,12 +198,66 @@ def create_gcal_event(interview_data: dict):
                 'timeZone': 'UTC',
             },
         }
+
+        if request_conference:
+            # Try multiple types in case of account-specific naming quirks
+            # hangoutsMeet (GSuite/Modern), googleMeet (Standard), eventHangout (Legacy/Consumer fallback)
+            potential_types = ['hangoutsMeet', 'googleMeet', 'eventHangout']
+            if allowed_types:
+                # Prioritize types that the calendar explicitly allows
+                potential_types = [t for t in allowed_types if t in potential_types] + [t for t in potential_types if t not in allowed_types]
+            
+            created_event = None
+            last_error = None
+
+            for m_type in potential_types:
+                try:
+                    event['conferenceData'] = {
+                        'createRequest': {
+                            'requestId': f"nexus-{int(datetime.utcnow().timestamp())}-{m_type}",
+                            'conferenceSolutionKey': {'type': m_type}
+                        }
+                    }
+                    created_event = service.events().insert(
+                        calendarId=target_calendar, 
+                        body=event,
+                        conferenceDataVersion=1
+                    ).execute()
+                    break # Success!
+                except Exception as e:
+                    last_error = e
+                    log.info(f"Retrying GCal meeting with alternative type due to: {e}")
+                    continue
+            
+            if not created_event:
+                # Final fallback: create WITHOUT conference data
+                log.warning(f"All conference types failed, falling back to standard event. Last error: {last_error}")
+                if 'conferenceData' in event: 
+                    del event['conferenceData']
+                created_event = service.events().insert(
+                    calendarId=target_calendar, 
+                    body=event
+                ).execute()
+        else:
+            # Case where it's not a video call
+            created_event = service.events().insert(
+                calendarId=target_calendar, 
+                body=event
+            ).execute()
         
-        created_event = service.events().insert(calendarId=target_calendar, body=event).execute()
-        return created_event.get('id')
+        # Get hangoutLink or from conferenceData entryPoints
+        meet_link = created_event.get('hangoutLink') if created_event else None
+        if created_event and not meet_link and created_event.get('conferenceData'):
+            entry_points = created_event['conferenceData'].get('entryPoints', [])
+            for ep in entry_points:
+                if ep.get('entryPointType') == 'video':
+                    meet_link = ep.get('uri')
+                    break
+        
+        return created_event.get('id') if created_event else None, meet_link
     except Exception as e:
         log.error(f"Failed to create GCal event: {e}")
-        return None
+        return None, None
 
 def delete_gcal_event(gcal_event_id: str):
     """Remove an event from Google Calendar."""

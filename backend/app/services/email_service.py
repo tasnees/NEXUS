@@ -63,3 +63,46 @@ def send_assessment_email(to_email: str, job_name: str, assessment_data: dict):
     except Exception as e:
         print(f"❌ Failed to send email to {to_email}: {e}")
         return False
+
+def send_interview_email(to_email: str, candidate_name: str, role: str, date: str, meet_link: str = None):
+    """
+    Sends an interview invitation email with the Google Meet link if available.
+    """
+    if not SMTP_USER or not SMTP_PASSWORD:
+        print(f"SMTP credentials missing. Would have sent interview email to {to_email}.")
+        return False
+
+    try:
+        msg = MIMEMultipart()
+        msg['From'] = SENDER_EMAIL
+        msg['To'] = to_email
+        msg['Subject'] = f"🗓️ Interview Scheduled: {role} at NEXUS"
+
+        meet_section = f"\nGoogle Meet Link: {meet_link}\n" if meet_link else ""
+        
+        body = f"""
+        Hello {candidate_name},
+
+        We are pleased to invite you for an interview for the {role} position.
+
+        Interview Details:
+        - Date & Time: {date}
+        {meet_section}
+        
+        We look forward to speaking with you!
+
+        Best regards,
+        The NexHire HR Team
+        """
+        msg.attach(MIMEText(body, 'plain'))
+
+        server = smtplib.SMTP(SMTP_SERVER, SMTP_PORT)
+        server.starttls()
+        server.login(SMTP_USER, SMTP_PASSWORD)
+        server.send_message(msg)
+        server.quit()
+        print(f"Interview email successfully sent to {to_email}")
+        return True
+    except Exception as e:
+        print(f"❌ Failed to send interview email to {to_email}: {e}")
+        return False
