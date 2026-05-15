@@ -7,6 +7,7 @@ import Dashboard from './pages/dashboard';
 import Candidates from './pages/candidates';
 import CandidateProfile from './pages/candidate';
 import SentimentAnalysis from './pages/setiment_analysis';
+import Reports from './pages/reports';
 import Interviews from './pages/interviews';
 import Assessments from './pages/assessments';
 import AssessmentPortal from './pages/assessment_portal';
@@ -30,6 +31,7 @@ function App() {
           <Route path="/candidates" element={<MainLayout><Candidates /></MainLayout>} />
           <Route path="/candidate/:id" element={<MainLayout><CandidateProfile /></MainLayout>} />
           <Route path="/sentiment-analysis" element={<MainLayout><SentimentAnalysis /></MainLayout>} />
+          <Route path="/reports" element={<MainLayout><Reports /></MainLayout>} />
           <Route path="/interviews" element={<MainLayout><Interviews /></MainLayout>} />
           <Route path="/assessments" element={<MainLayout><Assessments /></MainLayout>} />
           <Route path="/recruiter" element={<MainLayout><AIRecruiter /></MainLayout>} />

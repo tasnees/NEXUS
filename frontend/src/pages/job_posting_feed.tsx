@@ -68,6 +68,9 @@ const JobPostingFeed: React.FC = () => {
     const [isEnriching, setIsEnriching] = useState(false);
     const [isSubmitting, setIsSubmitting] = useState(false);
 
+    const [isEditing, setIsEditing] = useState(false);
+    const [editingId, setEditingId] = useState<number | null>(null);
+
     const [formData, setFormData] = useState({
         title: '',
         department: '',
@@ -171,6 +174,8 @@ const JobPostingFeed: React.FC = () => {
         setIsCreateModalVisible(false);
         setTimeout(() => {
             setIsCreateModalOpen(false);
+            setIsEditing(false);
+            setEditingId(null);
             setFormData({
                 title: '',
                 department: '',
@@ -182,6 +187,28 @@ const JobPostingFeed: React.FC = () => {
                 status: 'active',
                 timePerWeek: '40 hours'
             });
+        }, 300);
+    };
+
+    const openEditModal = (p: Position) => {
+        setIsEditing(true);
+        setEditingId(p.id);
+        setFormData({
+            title: p.title,
+            department: p.department,
+            location: p.location,
+            nature: p.type || 'online',
+            salary: p.salary,
+            description: p.description,
+            company: p.manager || 'HireSync AI',
+            status: p.status || 'active',
+            timePerWeek: '40 hours'
+        });
+        setIsModalVisible(false);
+        setTimeout(() => {
+            setIsModalOpen(false);
+            setIsCreateModalOpen(true);
+            setTimeout(() => setIsCreateModalVisible(true), 10);
         }, 300);
     };
 
@@ -216,32 +243,48 @@ const JobPostingFeed: React.FC = () => {
         setIsSubmitting(true);
         
         try {
-            // 1. Send to Webhook
-            const webhookPromise = fetch(MAKE_WEBHOOK_URL, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    ...formData,
-                    event: 'job_created',
-                    timestamp: new Date().toISOString()
-                })
-            });
+            if (isEditing && editingId) {
+                const response = await fetch(`http://localhost:8001/api/v1/jobs/${editingId}`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(formData)
+                });
 
-            // 2. Save to Backend
-            const backendPromise = fetch('http://localhost:8001/api/v1/jobs/', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(formData)
-            });
-
-            const [, backendRes] = await Promise.all([webhookPromise, backendPromise]);
-
-            if (backendRes.ok) {
-                showToast("Job posted successfully!", "success");
-                closeCreateModal();
-                fetchPositions();
+                if (response.ok) {
+                    showToast("Job updated successfully!", "success");
+                    closeCreateModal();
+                    fetchPositions();
+                } else {
+                    showToast("Failed to update job", "danger");
+                }
             } else {
-                showToast("Failed to save job locally", "danger");
+                // 1. Send to Webhook
+                const webhookPromise = fetch(MAKE_WEBHOOK_URL, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        ...formData,
+                        event: 'job_created',
+                        timestamp: new Date().toISOString()
+                    })
+                });
+
+                // 2. Save to Backend
+                const backendPromise = fetch('http://localhost:8001/api/v1/jobs/', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(formData)
+                });
+
+                const [, backendRes] = await Promise.all([webhookPromise, backendPromise]);
+
+                if (backendRes.ok) {
+                    showToast("Job posted successfully!", "success");
+                    closeCreateModal();
+                    fetchPositions();
+                } else {
+                    showToast("Failed to save job locally", "danger");
+                }
             }
         } catch (err) {
             showToast("Error submitting job", "danger");
@@ -438,7 +481,7 @@ const JobPostingFeed: React.FC = () => {
                         <form onSubmit={handleSubmit} className="flex flex-col max-h-[90vh]">
                             <div className="p-8 border-b border-bdr flex items-center justify-between bg-slate-50/50">
                                 <div>
-                                    <h3 className="text-2xl font-black text-txt-primary tracking-tight">Create New Position</h3>
+                                    <h3 className="text-2xl font-black text-txt-primary tracking-tight">{isEditing ? 'Edit Position' : 'Create New Position'}</h3>
                                     <p className="text-xs text-txt-muted font-bold uppercase tracking-widest mt-1">Configure your recruitment requirements</p>
                                 </div>
                                 <button type="button" onClick={closeCreateModal} className="p-3 rounded-2xl hover:bg-white hover:shadow-md transition-all text-txt-muted">
@@ -564,7 +607,7 @@ const JobPostingFeed: React.FC = () => {
                                     ) : (
                                         <>
                                             <Send className="w-5 h-5" />
-                                            Post Position
+                                            {isEditing ? 'Save Changes' : 'Post Position'}
                                         </>
                                     )}
                                 </button>
@@ -686,7 +729,12 @@ const JobPostingFeed: React.FC = () => {
                         </div>
 
                         <div className="p-8 border-t border-bdr bg-slate-50/50 flex items-center gap-3">
-                            <button className="flex-1 py-4 bg-primary hover:bg-primary-dark text-white font-bold rounded-2xl transition-all shadow-lg shadow-primary/20 active:scale-95">Edit Position</button>
+                            <button 
+                                onClick={() => openEditModal(selectedPosition)}
+                                className="flex-1 py-4 bg-primary hover:bg-primary-dark text-white font-bold rounded-2xl transition-all shadow-lg shadow-primary/20 active:scale-95"
+                            >
+                                Edit Position
+                            </button>
                             <button 
                                 onClick={() => navigate(`/candidates?job=${encodeURIComponent(selectedPosition.title)}`)}
                                 className="flex-1 py-4 bg-white hover:bg-elevated text-txt-primary font-bold rounded-2xl border border-bdr transition-all active:scale-95"

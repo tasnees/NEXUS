@@ -20,5 +20,6 @@ class Job(Base):
     salary = Column(String, nullable=True)
     time_per_week = Column(String, nullable=True)
     nature = Column(String, nullable=True)
+    department = Column(String, nullable=True)
     requirements = Column(String, nullable=True)
     description = Column(String, nullable=True)

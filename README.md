@@ -15,7 +15,7 @@ The easiest way to run the full stack (Frontend, Backend, and Database) is using
 
 ---
 
-### 💻 Local Development (Manual)
+### Local Development (Manual)
 
 #### 1. Start the Backend
 ```bash

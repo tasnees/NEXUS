@@ -223,6 +223,7 @@ const CandidateProfile: React.FC = () => {
     const [status, setStatus] = useState<CandidateStatus>('shortlist');
     const [candidate, setCandidate] = useState<CandidateData | null>(null);
     const [jobData, setJobData] = useState<JobData | null>(null);
+    const [interview, setInterview] = useState<any | null>(null);
     const [loading, setLoading] = useState(true);
 
     const [showPopup, setShowPopup] = useState(false);
@@ -255,6 +256,12 @@ const CandidateProfile: React.FC = () => {
                         if (jobRes.ok) setJobData(await jobRes.json());
                     } catch {}
                 }
+
+                // Fetch AI Interview
+                try {
+                    const interviewRes = await fetch(`http://localhost:8001/api/v1/interviews/by-email/${encodeURIComponent(data.email)}`);
+                    if (interviewRes.ok) setInterview(await interviewRes.json());
+                } catch {}
             } catch (err) {
                 console.error(err);
             } finally {
@@ -528,12 +535,36 @@ const CandidateProfile: React.FC = () => {
 
                             {/* Step 3 */}
                             <div className="flex gap-6 relative">
-                                <div className="w-10 h-10 rounded-full bg-slate-100 text-slate-300 flex items-center justify-center z-10 shadow-lg">
-                                    <span className="material-symbols-outlined text-sm">video_call</span>
+                                <div className={`w-10 h-10 rounded-full flex items-center justify-center z-10 shadow-lg ${interview?.ai_evaluation ? 'bg-primary text-white shadow-primary/20' : interview ? 'bg-amber-500 text-white shadow-amber-500/20' : 'bg-slate-100 text-slate-300'}`}>
+                                    <span className="material-symbols-outlined text-sm">{interview?.ai_evaluation ? 'check' : interview ? 'video_call' : 'pending'}</span>
                                 </div>
                                 <div className="flex-1">
-                                    <h5 className="font-black text-slate-900 uppercase tracking-tighter text-sm">Step 3: Personal Interview</h5>
-                                    <p className="text-xs text-slate-400 font-medium leading-relaxed mt-2 italic">Not yet scheduled. Coordinate via G-Suite calendar.</p>
+                                    <div className="flex justify-between items-start mb-2">
+                                        <h5 className="font-black text-slate-900 uppercase tracking-tighter text-sm">Step 3: AI Interview Session</h5>
+                                        {interview?.ai_evaluation ? (
+                                            <span className="text-xl font-black text-primary">{interview.ai_evaluation.overall_score}%</span>
+                                        ) : interview ? (
+                                            <span className="px-3 py-1 bg-amber-50 text-amber-600 rounded-lg text-[10px] font-black uppercase tracking-widest border border-amber-100">Live / Scheduled</span>
+                                        ) : (
+                                            <span className="text-xl font-black text-slate-200">Pending</span>
+                                        )}
+                                    </div>
+                                    <p className="text-xs text-slate-400 font-medium leading-relaxed">
+                                        {interview?.ai_evaluation 
+                                            ? `AI Verdict: ${interview.ai_evaluation.recommendation}`
+                                            : interview 
+                                            ? `Interview scheduled for ${new Date(interview.date).toLocaleDateString()}`
+                                            : "Interview session not yet initiated."}
+                                    </p>
+                                    {interview?.ai_evaluation && (
+                                        <div className="mt-4 p-4 bg-slate-50 rounded-2xl border border-slate-100 flex items-center justify-between group hover:border-primary/30 transition-all cursor-pointer" onClick={() => navigate('/sentiment-analysis', { state: { selectedId: interview.id } })}>
+                                            <div className="flex items-center gap-3">
+                                                <span className="material-symbols-outlined text-primary text-sm">psychology</span>
+                                                <span className="text-xs font-bold text-slate-700 truncate max-w-[200px]">{interview.ai_evaluation.summary}</span>
+                                            </div>
+                                            <span className="material-symbols-outlined text-slate-300 group-hover:text-primary transition-colors">analytics</span>
+                                        </div>
+                                    )}
                                 </div>
                             </div>
                         </div>

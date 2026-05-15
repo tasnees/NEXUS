@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
-import { Send, User, Bot, Loader2, CheckCircle2, Mic, MicOff, Video, VideoOff, MessageSquare, Monitor, Volume2, VolumeX } from 'lucide-react';
+import { Send, User, Bot, Loader2, Mic, MicOff, Video, VideoOff, MessageSquare, Settings as SettingsIcon, Volume2 } from 'lucide-react';
+import { InterviewAgentClient } from '../services/interviewAgentClient';
 
 interface Message {
   role: 'agent' | 'candidate';
@@ -18,6 +19,7 @@ const InterviewPortal: React.FC = () => {
     const [inputValue, setInputValue] = useState('');
     const [isLoading, setIsLoading] = useState(false);
     const [status, setStatus] = useState<'active' | 'completed'>('active');
+    const [showCompletion, setShowCompletion] = useState(false);
     const [error, setError] = useState<string | null>(null);
     
     // Video/Voice State
@@ -25,12 +27,29 @@ const InterviewPortal: React.FC = () => {
     const [isVideoOn, setIsVideoOn] = useState(false);
     const [isSpeaking, setIsSpeaking] = useState(false);
     const [isListening, setIsListening] = useState(false);
+    const [audioLevel, setAudioLevel] = useState(0);
+    const audioContextRef = useRef<AudioContext | null>(null);
+    const analyserRef = useRef<AnalyserNode | null>(null);
+    const animationFrameRef = useRef<number | null>(null);
+    const [availableVoices, setAvailableVoices] = useState<SpeechSynthesisVoice[]>([]);
+    const [selectedVoiceURI, setSelectedVoiceURI] = useState<string>('');
+    const [showSettings, setShowSettings] = useState(false);
     
     // Refs
     const scrollRef = useRef<HTMLDivElement>(null);
     const videoRef = useRef<HTMLVideoElement>(null);
     const recognitionRef = useRef<any>(null);
     const streamRef = useRef<MediaStream | null>(null);
+    const agentClientRef = useRef<InterviewAgentClient | null>(null);
+    
+    // State refs for speech callbacks
+    const isMicOnRef = useRef(isMicOn);
+    const isSpeakingRef = useRef(isSpeaking);
+    const isLoadingRef = useRef(isLoading);
+
+    useEffect(() => { isMicOnRef.current = isMicOn; }, [isMicOn]);
+    useEffect(() => { isSpeakingRef.current = isSpeaking; }, [isSpeaking]);
+    useEffect(() => { isLoadingRef.current = isLoading; }, [isLoading]);
 
     // --- Initialization ---
     useEffect(() => {
@@ -46,6 +65,19 @@ const InterviewPortal: React.FC = () => {
                 const data = await res.json();
                 setMessages([{ role: 'agent', content: data.agent_message }]);
                 setStatus(data.status);
+                
+                if (data.status === 'completed') {
+                    setShowCompletion(true);
+                }
+                
+                if (data.candidate_name) {
+                    // Initialize client-side agent
+                    agentClientRef.current = new InterviewAgentClient({
+                        candidate_name: data.candidate_name,
+                        role: data.role,
+                        candidate_summary: data.candidate_summary
+                    });
+                }
                 
                 // Automatically speak the first message if in video mode
                 if (mode === 'video') {
@@ -78,6 +110,11 @@ const InterviewPortal: React.FC = () => {
 
             recognitionRef.current.onend = () => {
                 setIsListening(false);
+                setTimeout(() => {
+                    if (isMicOnRef.current && !isSpeakingRef.current && !isLoadingRef.current) {
+                        startListening();
+                    }
+                }, 300);
             };
 
             recognitionRef.current.onerror = (event: any) => {
@@ -120,48 +157,145 @@ const InterviewPortal: React.FC = () => {
         }
     };
 
-    const toggleMic = () => {
-        if (!isMicOn && !isListening && !isSpeaking) {
-            startListening();
+    const startAudioMonitor = async () => {
+        try {
+            if (!audioContextRef.current) {
+                audioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)();
+            }
+            
+            const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+            const source = audioContextRef.current.createMediaStreamSource(stream);
+            const analyser = audioContextRef.current.createAnalyser();
+            analyser.fftSize = 256;
+            source.connect(analyser);
+            analyserRef.current = analyser;
+            
+            const bufferLength = analyser.frequencyBinCount;
+            const dataArray = new Uint8Array(bufferLength);
+            
+            const updateLevel = () => {
+                if (!analyserRef.current) return;
+                analyserRef.current.getByteFrequencyData(dataArray);
+                const average = dataArray.reduce((a, b) => a + b) / bufferLength;
+                setAudioLevel(average);
+                animationFrameRef.current = requestAnimationFrame(updateLevel);
+            };
+            
+            updateLevel();
+        } catch (err) {
+            console.error("Audio Monitor Error:", err);
         }
-        setIsMicOn(!isMicOn);
     };
 
-    const startListening = () => {
-        if (recognitionRef.current && !isListening && !isSpeaking) {
+    const stopAudioMonitor = () => {
+        if (animationFrameRef.current) {
+            cancelAnimationFrame(animationFrameRef.current);
+            animationFrameRef.current = null;
+        }
+        setAudioLevel(0);
+    };
+
+    const stopListening = () => {
+        if (recognitionRef.current && isListening) {
             try {
-                recognitionRef.current.start();
-                setIsListening(true);
+                recognitionRef.current.stop();
+                setIsListening(false);
             } catch (e) {
-                console.error("Failed to start listening", e);
+                console.error("Failed to stop listening", e);
             }
         }
     };
 
-    // --- Text to Speech ---
+    const toggleMic = () => {
+        const nextState = !isMicOn;
+        setIsMicOn(nextState);
+        
+        if (nextState) {
+            startListening(true);
+            startAudioMonitor();
+        } else {
+            stopListening();
+            stopAudioMonitor();
+        }
+    };
+
+    const startListening = (force = false) => {
+        // Use force or check isMicOn (taking into account async state)
+        if (recognitionRef.current && !isListening && !isSpeaking && (force || isMicOn)) {
+            try {
+                recognitionRef.current.start();
+                setIsListening(true);
+            } catch (e: any) {
+                if (e.name === 'InvalidStateError') {
+                    setIsListening(true);
+                } else {
+                    console.error("Failed to start listening", e);
+                }
+            }
+        }
+    };
+
+    // --- Text to Speech Setup ---
+    useEffect(() => {
+        const loadVoices = () => {
+            const voices = window.speechSynthesis.getVoices();
+            // Filter for English voices primarily
+            const englishVoices = voices.filter(v => v.lang.startsWith('en'));
+            setAvailableVoices(englishVoices);
+            
+            // Auto-select a good default if none selected
+            if (!selectedVoiceURI && englishVoices.length > 0) {
+                const bestDefault = 
+                    englishVoices.find(v => v.name.includes('Natural')) ||
+                    englishVoices.find(v => v.name.includes('Online')) ||
+                    englishVoices.find(v => v.name.includes('Google')) ||
+                    englishVoices[0];
+                setSelectedVoiceURI(bestDefault.voiceURI);
+            }
+        };
+        
+        if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
+            loadVoices();
+            window.speechSynthesis.onvoiceschanged = loadVoices;
+        }
+    }, [selectedVoiceURI]);
+
     const speak = (text: string) => {
         if (!('speechSynthesis' in window)) return;
         
-        // Cancel any ongoing speech
         window.speechSynthesis.cancel();
         
-        const utterance = new SpeechSynthesisUtterance(text);
-        utterance.rate = 1.0;
-        utterance.pitch = 1.0;
-        
-        // Try to find a better voice
-        const voices = window.speechSynthesis.getVoices();
-        const premiumVoice = voices.find(v => v.name.includes('Google') || v.name.includes('Natural') || v.name.includes('Samantha'));
-        if (premiumVoice) utterance.voice = premiumVoice;
+        setTimeout(() => {
+            const utterance = new SpeechSynthesisUtterance(text);
+            utterance.rate = 1.0; 
+            utterance.pitch = 1.0;
 
-        utterance.onstart = () => setIsSpeaking(true);
-        utterance.onend = () => {
-            setIsSpeaking(false);
-            if (isMicOn) startListening();
-        };
+            const voices = window.speechSynthesis.getVoices();
+            const voice = voices.find(v => v.voiceURI === selectedVoiceURI);
+            if (voice) {
+                utterance.voice = voice;
+            } else {
+                // Fallback to our previous smart selection logic if selected URI is missing
+                const fallback = voices.find(v => v.name.includes('Natural')) || voices.find(v => v.lang.startsWith('en'));
+                if (fallback) utterance.voice = fallback;
+            }
 
-        window.speechSynthesis.speak(utterance);
+            utterance.onstart = () => setIsSpeaking(true);
+            utterance.onend = () => {
+                setIsSpeaking(false);
+                if (isMicOnRef.current) setTimeout(() => startListening(), 500);
+            };
+            
+            window.speechSynthesis.speak(utterance);
+        }, 300);
     };
+
+    // Auto-scroll to bottom when messages update
+    useEffect(() => {
+        if (scrollRef.current) {
+            scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+        }
+    }, [messages, isLoading]);
 
     // --- Message Handling ---
     const handleSendMessage = async (textOverride?: string) => {
@@ -169,24 +303,45 @@ const InterviewPortal: React.FC = () => {
         if (!text.trim() || isLoading || status === 'completed') return;
 
         setInputValue('');
-        setMessages(prev => [...prev, { role: 'candidate', content: text }]);
+        const newMessages = [...messages, { role: 'candidate' as const, content: text }];
+        setMessages(newMessages);
         setIsLoading(true);
 
         try {
+            let agent_message: string | undefined;
+
+            // 1. Try to generate response on client side via Puter.js
+            if (agentClientRef.current) {
+                try {
+                    agent_message = await agentClientRef.current.generateResponse(newMessages);
+                } catch (aiError) {
+                    console.warn("Client-side AI failed, falling back to backend generation:", aiError);
+                }
+            }
+
+            // 2. Sync with backend (and get fallback response if client-side failed)
             const res = await fetch(`http://localhost:8001/api/v1/interview-agent/${interviewId}/chat`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ message: text })
+                body: JSON.stringify({ 
+                    message: text,
+                    agent_message: agent_message 
+                })
             });
 
             if (!res.ok) throw new Error("Connection lost. Please try again.");
             
             const data = await res.json();
-            setMessages(prev => [...prev, { role: 'agent', content: data.agent_message }]);
+            const finalAgentMsg = data.agent_message;
+            
+            setMessages(prev => [...prev, { role: 'agent', content: finalAgentMsg }]);
             setStatus(data.status);
+            if (data.status === 'completed') {
+                setTimeout(() => setShowCompletion(true), 1500);
+            }
             
             if (mode === 'video') {
-                speak(data.agent_message);
+                speak(finalAgentMsg);
             }
         } catch (err: any) {
             setError(err.message);
@@ -195,11 +350,15 @@ const InterviewPortal: React.FC = () => {
         }
     };
 
+    // Speak last agent message when switching to video mode
     useEffect(() => {
-        if (scrollRef.current) {
-            scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+      if (mode === 'video' && messages.length) {
+        const lastMsg = messages[messages.length - 1];
+        if (lastMsg.role === 'agent') {
+          speak(lastMsg.content);
         }
-    }, [messages, isLoading]);
+      }
+    }, [mode]);
 
     if (error) {
         return (
@@ -242,9 +401,49 @@ const InterviewPortal: React.FC = () => {
                     </button>
                 </div>
 
-                <div className="flex items-center gap-4">
-                    <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">{status}</span>
-                    <div className={`w-2 h-2 rounded-full ${status === 'active' ? 'bg-emerald-500 animate-pulse' : 'bg-slate-700'}`}></div>
+                <div className="flex items-center gap-3">
+                    <div className="relative">
+                        <button 
+                            onClick={() => setShowSettings(!showSettings)}
+                            className={`p-2 rounded-lg transition-all ${showSettings ? 'bg-blue-600 text-white' : 'bg-white/5 text-slate-400 hover:text-white'}`}
+                        >
+                            <SettingsIcon size={18} />
+                        </button>
+                        
+                        {showSettings && (
+                            <div className="absolute right-0 mt-2 w-72 bg-slate-900 border border-white/10 rounded-2xl shadow-2xl p-4 z-50 animate-in fade-in slide-in-from-top-2">
+                                <h3 className="text-xs font-bold text-slate-500 uppercase tracking-widest mb-3 flex items-center gap-2">
+                                    <Volume2 size={12} /> Voice Settings
+                                </h3>
+                                <div className="space-y-4">
+                                    <div>
+                                        <label className="text-[10px] text-slate-400 block mb-1.5 font-medium">Select Agent Voice</label>
+                                        <select 
+                                            value={selectedVoiceURI} 
+                                            onChange={(e) => setSelectedVoiceURI(e.target.value)}
+                                            className="w-full bg-black/40 border border-white/10 rounded-lg px-3 py-2 text-xs text-white outline-none focus:border-blue-500 transition-colors cursor-pointer"
+                                        >
+                                            {availableVoices.map(voice => (
+                                                <option key={voice.voiceURI} value={voice.voiceURI}>
+                                                    {voice.name.replace(/Microsoft |Google |Online \(Natural\) /g, '')}
+                                                </option>
+                                            ))}
+                                        </select>
+                                    </div>
+                                    <div className="pt-2 border-t border-white/5">
+                                        <p className="text-[9px] text-slate-500 leading-tight">
+                                            Tip: Choose "Natural" or "Online" voices for the most human-like experience.
+                                        </p>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+                    </div>
+                    
+                    <div className="flex items-center gap-4">
+                        <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">{status}</span>
+                        <div className={`w-2 h-2 rounded-full ${status === 'active' ? 'bg-emerald-500 animate-pulse' : 'bg-slate-700'}`}></div>
+                    </div>
                 </div>
             </header>
 
@@ -252,7 +451,8 @@ const InterviewPortal: React.FC = () => {
                 {mode === 'chat' ? (
                     /* --- Chat Layout --- */
                     <div className="flex-1 max-w-4xl mx-auto w-full flex flex-col p-8 overflow-hidden">
-                        <div ref={scrollRef} className="flex-1 overflow-y-auto space-y-6 pr-4 custom-scrollbar">
+                        {/* Glassmorphic container for transcript */}
+                        <div ref={scrollRef} className="flex-1 overflow-y-auto space-y-6 pr-4 custom-scrollbar bg-black/30 backdrop-blur-xl rounded-xl border border-white/10 p-4 shadow-lg">
                             {messages.map((msg, idx) => (
                                 <div key={idx} className={`flex ${msg.role === 'candidate' ? 'justify-end' : 'justify-start'} animate-in fade-in slide-in-from-bottom-4 duration-500`}>
                                     <div className={`flex gap-4 max-w-[85%] ${msg.role === 'candidate' ? 'flex-row-reverse' : ''}`}>
@@ -284,7 +484,12 @@ const InterviewPortal: React.FC = () => {
                                     placeholder="Type your response..."
                                     className="flex-1 bg-transparent border-none outline-none px-6 py-4 text-sm"
                                 />
-                                <button onClick={() => handleSendMessage()} className="w-12 h-12 bg-blue-600 text-white rounded-xl flex items-center justify-center hover:bg-blue-500 transition-all"><Send size={20} /></button>
+                                <button 
+                                    onClick={() => handleSendMessage()} 
+                                    className="w-12 h-12 bg-blue-600 text-white rounded-xl flex items-center justify-center hover:bg-blue-500 transition-all hover:scale-105 transition-transform duration-200"
+                                >
+                                    <Send size={20} />
+                                </button>
                             </div>
                         </div>
                     </div>
@@ -299,9 +504,11 @@ const InterviewPortal: React.FC = () => {
                                     <div className={`w-32 h-32 rounded-full bg-blue-600 flex items-center justify-center shadow-[0_0_50px_rgba(37,99,235,0.4)] transition-all duration-500 ${isSpeaking ? 'scale-110 shadow-[0_0_80px_rgba(37,99,235,0.6)]' : ''}`}>
                                         <Bot size={64} className="text-white" />
                                     </div>
-                                    <div className="text-center">
+                                    <div className="text-center px-6">
                                         <h2 className="text-xl font-bold text-white mb-2">Nexus AI</h2>
-                                        <p className="text-sm text-blue-400 font-medium tracking-widest uppercase">{isSpeaking ? 'Speaking...' : 'Listening'}</p>
+                                        <p className="text-sm text-blue-400 font-medium tracking-widest uppercase">
+                                            {isLoading ? 'Thinking...' : isSpeaking ? 'Speaking...' : 'Listening'}
+                                        </p>
                                     </div>
                                     {/* Waveform Visualization */}
                                     {isSpeaking && (
@@ -312,7 +519,19 @@ const InterviewPortal: React.FC = () => {
                                         </div>
                                     )}
                                 </div>
-                                <div className="absolute bottom-6 left-6 flex items-center gap-2 bg-black/40 backdrop-blur-md px-3 py-1.5 rounded-lg border border-white/10">
+                                
+                                {/* Agent Subtitles */}
+                                {messages.length > 0 && messages[messages.length - 1].role === 'agent' && (
+                                    <div className="absolute bottom-6 left-0 right-0 flex justify-center px-6 pointer-events-none z-10">
+                                        <div className="bg-black/70 backdrop-blur-md px-4 py-2 rounded-xl border border-white/10 max-w-full animate-in fade-in slide-in-from-bottom-2">
+                                            <p className="text-xs font-medium text-white/90 line-clamp-2 text-center">
+                                                {messages[messages.length - 1].content}
+                                            </p>
+                                        </div>
+                                    </div>
+                                )}
+
+                                <div className="absolute top-6 left-6 flex items-center gap-2 bg-black/40 backdrop-blur-md px-3 py-1.5 rounded-lg border border-white/10">
                                     <div className="w-2 h-2 rounded-full bg-emerald-500"></div>
                                     <span className="text-[10px] font-black uppercase text-white tracking-widest">Agent Live</span>
                                 </div>
@@ -346,8 +565,18 @@ const InterviewPortal: React.FC = () => {
                             <div className="bg-slate-900/80 backdrop-blur-2xl border border-white/10 rounded-[2.5rem] p-4 flex items-center gap-6 shadow-2xl">
                                 <button 
                                     onClick={toggleMic}
-                                    className={`w-14 h-14 rounded-full flex items-center justify-center transition-all ${isMicOn ? 'bg-white/10 text-white hover:bg-white/20' : 'bg-red-500 text-white hover:bg-red-600'}`}
+                                    className={`w-14 h-14 rounded-full flex items-center justify-center transition-all relative ${isMicOn ? 'bg-blue-600 text-white shadow-[0_0_20px_rgba(37,99,235,0.4)]' : 'bg-red-500 text-white hover:bg-red-600'}`}
                                 >
+                                    {isMicOn && (
+                                        <>
+                                            <div className="absolute inset-0 rounded-full bg-blue-600 animate-ping opacity-20"></div>
+                                            {/* Real-time volume meter ring */}
+                                            <div 
+                                                className="absolute inset-0 rounded-full border-2 border-white/30 transition-transform duration-75"
+                                                style={{ transform: `scale(${1 + (audioLevel / 100)})` }}
+                                            ></div>
+                                        </>
+                                    )}
                                     {isMicOn ? <Mic size={24} /> : <MicOff size={24} />}
                                 </button>
                                 <button 
@@ -361,11 +590,13 @@ const InterviewPortal: React.FC = () => {
 
                                 {isListening ? (
                                     <div className="px-6 py-2 bg-blue-600/20 border border-blue-500/30 rounded-2xl">
-                                        <p className="text-xs font-bold text-blue-400">Speak now...</p>
+                                        <p className="text-xs font-bold text-blue-400">
+                                            {audioLevel > 10 ? 'I can hear you! Speak now...' : 'Speak now...'}
+                                        </p>
                                     </div>
                                 ) : (
                                     <button 
-                                        onClick={startListening}
+                                        onClick={() => startListening(true)}
                                         disabled={isSpeaking || isLoading}
                                         className="px-8 py-3 bg-blue-600 text-white rounded-2xl font-bold text-sm hover:bg-blue-500 transition-all disabled:opacity-50"
                                     >
@@ -386,6 +617,33 @@ const InterviewPortal: React.FC = () => {
                     </div>
                 )}
             </main>
+
+            {/* Completion Modal */}
+            {showCompletion && (
+                <div className="fixed inset-0 z-[100] flex items-center justify-center p-6">
+                    <div className="absolute inset-0 bg-slate-950/80 backdrop-blur-md animate-in fade-in duration-500"></div>
+                    <div className="relative bg-[#111] border border-white/10 w-full max-w-lg rounded-[3rem] p-10 text-center shadow-[0_0_100px_rgba(37,99,235,0.2)] animate-in zoom-in duration-500">
+                        <div className="w-24 h-24 bg-blue-600 rounded-[2rem] flex items-center justify-center mx-auto mb-8 shadow-lg shadow-blue-600/20">
+                            <Bot className="w-12 h-12 text-white" />
+                        </div>
+                        <h2 className="text-3xl font-black text-white mb-4 tracking-tight">Interview Completed</h2>
+                        <p className="text-slate-400 text-lg leading-relaxed mb-10">
+                            Thank you for your time today! Your responses have been recorded and our recruitment team will review your session shortly.
+                        </p>
+                        <div className="space-y-4">
+                            <button 
+                                onClick={() => navigate('/')} 
+                                className="w-full py-4 bg-blue-600 hover:bg-blue-500 text-white font-bold rounded-2xl transition-all shadow-xl shadow-blue-600/20 active:scale-[0.98]"
+                            >
+                                Finish & Exit Portal
+                            </button>
+                            <p className="text-[10px] text-slate-600 font-bold uppercase tracking-[0.2em]">
+                                Your session is now securely closed
+                            </p>
+                        </div>
+                    </div>
+                </div>
+            )}
 
             {/* Custom Animations */}
             <style dangerouslySetInnerHTML={{ __html: `

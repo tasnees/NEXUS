@@ -21,10 +21,24 @@ def align_schema():
         print("Checking/Adding 'assessment_results' column...")
         cur.execute("ALTER TABLE candidates ADD COLUMN IF NOT EXISTS assessment_results JSON DEFAULT '[]'")
 
+        # 3. Add columns to jobs table
+        print("Ensuring 'jobs' table has all required columns...")
+        job_cols = [
+            ("company", "VARCHAR"),
+            ("salary", "VARCHAR"),
+            ("time_per_week", "VARCHAR"),
+            ("nature", "VARCHAR"),
+            ("department", "VARCHAR"),
+            ("requirements", "TEXT"),
+            ("description", "TEXT")
+        ]
+        for col_name, col_type in job_cols:
+            cur.execute(f"ALTER TABLE jobs ADD COLUMN IF NOT EXISTS {col_name} {col_type}")
+
         conn.commit()
         cur.close()
         conn.close()
-        print("\n✅ Database Schema aligned successfully.")
+        print("\nDatabase Schema aligned successfully.")
         
     except Exception as e:
         print(f"Alignment failed: {e}")

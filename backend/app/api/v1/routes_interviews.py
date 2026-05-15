@@ -112,3 +112,14 @@ def delete_interview(interview_id: int, db: Session = Depends(get_db)):
     db.delete(db_interview)
     db.commit()
     return {"message": "Interview deleted successfully"}
+@router.get("/by-email/{email}", response_model=InterviewResponse)
+def get_interview_by_email(email: str, db: Session = Depends(get_db)):
+    # Find candidate first to get their name (since interviews are currently linked by name)
+    candidate = db.query(Candidate).filter(Candidate.email == email).first()
+    if not candidate:
+        raise HTTPException(status_code=404, detail="Candidate not found")
+    
+    interview = db.query(Interview).filter(Interview.candidate_name == candidate.name).order_by(Interview.date.desc()).first()
+    if not interview:
+        raise HTTPException(status_code=404, detail="Interview not found")
+    return interview

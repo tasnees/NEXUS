@@ -29,7 +29,7 @@ services:
       - ALGORITHM=HS256
       - USE_OAUTH=false
       - BACKEND_API_URL=http://localhost:8001
-      - GOOGLE_DRIVE_FOLDER_ID=1GP4bhdxIabQOs-dPsxS8f8Cc1rmZ__0a
+      - GOOGLE_DRIVE_FOLDER_ID=1pyXLZo631ifuqmDW646cPDLDRA2kq-az
     depends_on:
       db:
         condition: service_healthy

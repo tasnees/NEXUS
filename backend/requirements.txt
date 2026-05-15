@@ -16,6 +16,5 @@ pdfplumber
 PyPDF2
 python-docx
 pandas
-puter-python-sdk>=0.0.18
+puter
 email-validator
-watchfiles

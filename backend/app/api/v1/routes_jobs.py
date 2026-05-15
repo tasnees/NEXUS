@@ -27,7 +27,7 @@ async def create_job(job: JobCreate, db: Session = Depends(get_db)):
         db_job = Job(
             title=job.title,
             company_logo="https://lh3.googleusercontent.com/aida-public/AB6AXuBXUe0dmBI_6Ahqs12jg49xCqnskPbWVbJiDJo-a8JpMvraRUoQRiVW2GPG0395sCABn0bzSPqmE4NlyGxXLNTx_YyDFK6QXj51d6Rf8aDLbxfrwWO4bUxQ_ixa3KvJaqDCBNZK5t-66FlUyxvWpYp0dOSwdLAoGZlEF5CtWnRYOC9K9L1GMnUZ9zbZnpADAd0E38c0U_DmPBkK0mMmYJzOwQ-AwpFqF1GOJethPdY5gsGaKxVbl2Z4pyv_nCU7EB_cA9aoDwjyEENM",
-            location=location,
+            location=job.location or location,
             posted_at="Posted just now", 
             status=job.status,
             applicants=0,
@@ -35,6 +35,7 @@ async def create_job(job: JobCreate, db: Session = Depends(get_db)):
             interviewed=0,
             tags=tags,
             company=job.company,
+            department=job.department,
             salary=salary,
             time_per_week=job.timePerWeek,
             nature=job.nature,
@@ -49,6 +50,32 @@ async def create_job(job: JobCreate, db: Session = Depends(get_db)):
         import traceback
         traceback.print_exc()
         raise
+
+@router.put("/{job_id}", response_model=JobResponse)
+def update_job(job_id: int, job_update: JobCreate, db: Session = Depends(get_db)):
+    db_job = db.query(Job).filter(Job.id == job_id).first()
+    if not db_job:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=404, detail="Job not found")
+    
+    # Update fields
+    db_job.title = job_update.title
+    db_job.company = job_update.company
+    db_job.salary = job_update.salary
+    db_job.nature = job_update.nature
+    db_job.location = job_update.location or db_job.location
+    db_job.department = job_update.department
+    db_job.time_per_week = job_update.timePerWeek
+    db_job.description = job_update.description
+    db_job.requirements = job_update.requirements
+    db_job.status = job_update.status
+    
+    if job_update.tags:
+        db_job.tags = job_update.tags
+
+    db.commit()
+    db.refresh(db_job)
+    return db_job
 
 from app.models.candidate import Candidate
 from app.models.interview import Interview
