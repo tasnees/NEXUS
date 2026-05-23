@@ -4,15 +4,11 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from typing import List
 from dotenv import load_dotenv
-import puter # type: ignore
-
+from app.core.ai_engine import AIEngine
 from app.config.database import get_db
 from app.models.assessment import Assessment
 from app.models.job import Job
 from app.schemas.assessment import AssessmentCreate, AssessmentResponse
-
-load_dotenv()
-PUTER_TOKEN = os.getenv("PUTER_TOKEN")
 
 router = APIRouter()
 
@@ -31,14 +27,11 @@ async def generate_ai_assessment(
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
 
-    if not PUTER_TOKEN:
-        raise HTTPException(status_code=500, detail="PUTER_TOKEN not found for AI generation")
-
     # 1. FETCH PREVIOUS ASSESSMENTS to avoid repetition
     previous_assessments = db.query(Assessment).filter(Assessment.job_id == job_id).all()
     past_topics = ", ".join([f"'{a.title}'" for a in previous_assessments])
     print(f"DEBUG: Generating AI assessment for {job.title}...")
-    ai = puter.PuterAI(token=PUTER_TOKEN)
+    ai = AIEngine
     default_duration = "3 Hours" 
     prompt = f"""Generate a Minimalist Technical Spec for a {job.title} assessment.
 JOB REQUIREMENTS: {job.requirements}
@@ -72,7 +65,7 @@ EXPECTED OUTPUT (Strict JSON only):
 }}
 """
     try:
-        response = ai.chat(prompt, model="gpt-4o")
+        response = await ai.chat(prompt, model="gpt-4o")
         raw_str = str(response).strip()
         start_idx = raw_str.find("{")
         end_idx = raw_str.rfind("}")

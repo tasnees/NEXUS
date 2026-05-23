@@ -4,11 +4,11 @@ from typing import List, Optional
 from app.config.database import get_db
 from app.models.submission import AssessmentSubmission
 from app.schemas.submission import SubmissionCreate, SubmissionResponse
-from dotenv import load_dotenv
+from app.core.ai_engine import AIEngine
+from app.config.database import get_db
+from app.models.submission import AssessmentSubmission
+from app.schemas.submission import SubmissionCreate, SubmissionResponse
 import os
-
-load_dotenv()
-PUTER_TOKEN = os.getenv("PUTER_TOKEN")
 
 router = APIRouter()
 
@@ -119,10 +119,7 @@ async def ai_grade_submission(submission_id: int, db: Session = Depends(get_db))
 
     # Use Puter AI to grade
     try:
-        import puter
-        if not PUTER_TOKEN:
-            raise ValueError("PUTER_TOKEN not found in environment")
-        ai = puter.PuterAI(token=PUTER_TOKEN)
+        ai = AIEngine
     except Exception as e:
         print(f"Puter Init Error: {e}")
         raise HTTPException(status_code=500, detail=f"AI Service unavailable: {str(e)}")
@@ -155,10 +152,7 @@ async def ai_grade_submission(submission_id: int, db: Session = Depends(get_db))
     
     try:
         # Resilient chat call (attempt gpt-4o first, then fallback)
-        try:
-            response = ai.chat(prompt, model="gpt-4o")
-        except:
-            response = ai.chat(prompt)
+        response = await ai.chat(prompt, model="gpt-4o")
 
         raw_str = str(response).strip()
         print(f"DEBUG: RAW AI RESPONSE: {raw_str}")

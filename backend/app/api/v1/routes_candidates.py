@@ -147,3 +147,38 @@ def delete_candidate(candidate_id: int, db: Session = Depends(get_db)):
     db.delete(candidate)
     db.commit()
 
+@router.post("/{candidate_id}/dispatch-assessment")
+def dispatch_assessment(candidate_id: int, db: Session = Depends(get_db)):
+    """Manually trigger the assessment email dispatch."""
+    success = check_and_dispatch_assessment(db, candidate_id)
+    if not success:
+        # Check why it failed
+        candidate = db.query(Candidate).filter(Candidate.id == candidate_id).first()
+        if not candidate:
+             raise HTTPException(status_code=404, detail="Candidate not found")
+        
+        # If score is too low, we might want to force it anyway in a manual trigger?
+        # For now, let's just report failure.
+        raise HTTPException(status_code=400, detail="Criteria not met for assessment dispatch (low score or missing email/job)")
+    
+    return {"message": "Assessment dispatched successfully"}
+
+@router.post("/{candidate_id}/status-email")
+def status_email(candidate_id: int, status: str, db: Session = Depends(get_db)):
+    """Send a Hire or Reject email to the candidate."""
+    candidate = db.query(Candidate).filter(Candidate.id == candidate_id).first()
+    if not candidate:
+        raise HTTPException(status_code=404, detail="Candidate not found")
+    
+    from app.services.email_service import send_status_email
+    success = send_status_email(
+        to_email=candidate.email,
+        candidate_name=candidate.name,
+        status=status,
+        job_title=candidate.applied_job or "the position"
+    )
+    
+    if not success:
+        raise HTTPException(status_code=500, detail="Failed to send status email")
+    
+    return {"message": f"{status.capitalize()} email sent successfully"}

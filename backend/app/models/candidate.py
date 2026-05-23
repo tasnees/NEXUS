@@ -28,6 +28,10 @@ class Candidate(Base):
     # New Field for Assessment Results
     assessment_results = Column(JSON, default=list) # [{"assessment_id": 1, "grade": "A", "feedback": "..."}]
 
+    # New Fields for UI Consistency
+    score           = Column(Integer, default=0)
+    stage           = Column(String, default="Applied")
+
     # --- raw text (useful for re-analysis later) ---
     raw_text        = Column(String, nullable=True)
 

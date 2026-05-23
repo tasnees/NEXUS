@@ -14,7 +14,30 @@ class AIEngine:
             print("Warning: PUTER_TOKEN is not set.")
             return None
         try:
-            return puter.PuterAI(token=token)
+            # Step 2: Initialize Puter AI Brain
+            ai_instance = None
+            if hasattr(puter, "PuterAI"):
+                try:
+                    ai_instance = puter.PuterAI(api_key=token)
+                except TypeError:
+                    try:
+                        ai_instance = puter.PuterAI(token=token)
+                    except TypeError:
+                        ai_instance = puter.PuterAI()
+                        if token:
+                            try:
+                                ai_instance.token = token
+                            except:
+                                pass
+            elif hasattr(puter, "ai") and hasattr(puter.ai, "PuterAI"):
+                try:
+                    ai_instance = puter.ai.PuterAI(api_key=token)
+                except TypeError:
+                    ai_instance = puter.ai.PuterAI()
+            elif hasattr(puter, "ai"):
+                ai_instance = puter.ai
+            
+            return ai_instance
         except Exception as e:
             print(f"Error initializing PuterAI: {e}")
             return None
@@ -28,19 +51,42 @@ class AIEngine:
         if not client:
             return ""
 
+        full_prompt = f"{system_prompt}\n\n{prompt}" if system_prompt else prompt
+        
+        response = None
+        # Robust method discovery
+        for method_name in ["chat", "create_completion", "complete", "chat_complete"]:
+            if hasattr(client, method_name):
+                try:
+                    method = getattr(client, method_name)
+                    # Try with model first
+                    try:
+                        response = method(full_prompt, model=model)
+                    except:
+                        # Try without model
+                        response = method(full_prompt)
+                    
+                    if response:
+                        break
+                except Exception as e:
+                    print(f"AIEngine debug: method {method_name} failed: {e}")
+                    continue
+
+        if not response:
+            print("AIEngine.chat error: All Puter AI methods failed.")
+            return ""
+
         try:
-            full_prompt = f"{system_prompt}\n\n{prompt}" if system_prompt else prompt
-            # Puter SDK returns a string or an object with text attribute
-            response = client.chat(full_prompt, model=model)
-            
-            if response and isinstance(response, str):
+            if isinstance(response, str):
                 return response
             elif hasattr(response, 'text'):
                 return response.text
+            elif isinstance(response, dict) and 'text' in response:
+                return response['text']
             return str(response)
         except Exception as e:
-            print(f"AIEngine.chat error: {e}")
-            return ""
+            print(f"AIEngine.chat parse error: {e}")
+            return str(response)
 
     @staticmethod
     async def generate_json(prompt: str, system_prompt: Optional[str] = None, model: str = "gpt-4o-mini") -> Dict[str, Any]:

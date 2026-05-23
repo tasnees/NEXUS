@@ -225,6 +225,24 @@ const Candidates: React.FC = () => {
         }, 300);
     };
 
+    const handleAdvanceStage = async () => {
+        if (!selectedCandidate) return;
+        showToast("Sending assessment...", "info");
+        try {
+            const response = await fetch(`http://localhost:8001/api/v1/candidates/${selectedCandidate.id}/dispatch-assessment`, {
+                method: 'POST'
+            });
+            if (response.ok) {
+                showToast("Assessment invitation sent!", "success");
+            } else {
+                const data = await response.json();
+                showToast(data.detail || "Criteria not met", "danger");
+            }
+        } catch (err) {
+            showToast("Network error", "danger");
+        }
+    };
+
     return (
         <div className="flex-1 flex flex-col bg-base animate-fade-in relative">
             {/* Header Section */}
@@ -562,7 +580,12 @@ const Candidates: React.FC = () => {
                         </div>
                         
                         <div className="p-8 border-t border-bdr bg-slate-50/50 flex items-center gap-3">
-                            <button className="flex-1 py-3.5 bg-primary hover:bg-primary-dark text-white font-bold rounded-2xl transition-all shadow-lg shadow-primary/20 active:scale-95">Advance Stage</button>
+                            <button 
+                                onClick={handleAdvanceStage}
+                                className="flex-1 py-3.5 bg-primary hover:bg-primary-dark text-white font-bold rounded-2xl transition-all shadow-lg shadow-primary/20 active:scale-95"
+                            >
+                                Advance Stage
+                            </button>
                             <button className="flex-1 py-3.5 bg-white hover:bg-elevated text-txt-primary font-bold rounded-2xl border border-bdr transition-all active:scale-95">Schedule Interview</button>
                             <button className="w-12 h-12 flex items-center justify-center rounded-2xl bg-red-50 text-red-500 border border-red-100 hover:bg-red-500 hover:text-white transition-all">
                                 <X className="w-5 h-5" />

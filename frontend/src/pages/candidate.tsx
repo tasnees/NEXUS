@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 
 // --- Types ---
-type CandidateStatus = 'shortlist' | 'reject' | 'hire';
+type CandidateStatus = 'shortlist' | 'assessment' | 'reject' | 'hire';
 
 interface CandidateData {
     id: number;
@@ -272,7 +272,8 @@ const CandidateProfile: React.FC = () => {
     }, [id]);
 
     const statusOptions: { value: CandidateStatus; icon: string; label: string }[] = [
-        { value: 'shortlist', icon: 'check_circle', label: 'Shortlist' },
+        { value: 'shortlist', icon: 'star', label: 'Shortlist' },
+        { value: 'assessment', icon: 'assignment', label: 'Assessment' },
         { value: 'reject', icon: 'cancel', label: 'Reject' },
         { value: 'hire', icon: 'stars', label: 'Hire' },
     ];
@@ -280,54 +281,49 @@ const CandidateProfile: React.FC = () => {
     const handleHire = async () => {
         if (!candidate) return;
         try {
-            const candidateDetails = {
-                name: candidate.name,
-                email: candidate.email,
-                phone: candidate.phone,
-                location: 'Remote',
-                skills: candidate.skills,
-                score: 88,
-                recommendation: 'Strong Hire'
-            };
-            await fetch('https://hook.eu1.make.com/tqqibszbd6xrovi349ye5sovpgyq4ees', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(candidateDetails),
+            const response = await fetch(`http://localhost:8001/api/v1/candidates/${candidate.id}/status-email?status=hire`, {
+                method: 'POST'
             });
-            setPopupMessage(`Hire invitation dispatched to ${candidate.email}!`);
-            setPopupType('success');
-            setShowPopup(true);
-            setTimeout(() => setShowPopup(false), 5000);
+            if (response.ok) {
+                showToast(`Hire invitation dispatched to ${candidate.email}!`, "success");
+            } else {
+                showToast("Failed to send hire email via backend.", "danger");
+            }
         } catch (error) {
-            setPopupMessage(`Failed to send hire email.`);
-            setPopupType('error');
-            setShowPopup(true);
-            setTimeout(() => setShowPopup(false), 5000);
+            showToast(`Network error while sending hire email.`, "danger");
+        }
+    };
+
+    const handleAssessment = async () => {
+        if (!candidate) return;
+        try {
+            const response = await fetch(`http://localhost:8001/api/v1/candidates/${candidate.id}/dispatch-assessment`, {
+                method: 'POST'
+            });
+            if (response.ok) {
+                showToast(`Assessment invitation sent to ${candidate.email}!`, "success");
+            } else {
+                const data = await response.json();
+                showToast(data.detail || "Assessment criteria not met (check score/job)", "danger");
+            }
+        } catch (error) {
+            showToast("Failed to connect to assessment service", "danger");
         }
     };
 
     const handleReject = async () => {
         if (!candidate) return;
         try {
-            const candidateDetails = {
-                name: candidate.name,
-                email: candidate.email,
-                reason: 'Does not meet technical requirements for the role'
-            };
-            await fetch('https://hook.eu1.make.com/d7iuxyv2k5agixhzyg0gmgcsd6e25z8e', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(candidateDetails),
+            const response = await fetch(`http://localhost:8001/api/v1/candidates/${candidate.id}/status-email?status=reject`, {
+                method: 'POST'
             });
-            setPopupMessage(`Rejection notification sent to ${candidate.email}.`);
-            setPopupType('success');
-            setShowPopup(true);
-            setTimeout(() => setShowPopup(false), 5000);
+            if (response.ok) {
+                showToast(`Rejection notification sent to ${candidate.email}.`, "success");
+            } else {
+                showToast("Failed to send rejection email via backend.", "danger");
+            }
         } catch (error) {
-            setPopupMessage(`Failed to send rejection email.`);
-            setPopupType('error');
-            setShowPopup(true);
-            setTimeout(() => setShowPopup(false), 5000);
+            showToast(`Network error while sending rejection email.`, "danger");
         }
     };
 
@@ -409,7 +405,12 @@ const CandidateProfile: React.FC = () => {
                             ))}
                         </div>
                         <button 
-                            onClick={() => status === 'hire' ? handleHire() : status === 'reject' ? handleReject() : showToast("Please select a status", "info")}
+                            onClick={() => {
+                                if (status === 'hire') handleHire();
+                                else if (status === 'reject') handleReject();
+                                else if (status === 'assessment') handleAssessment();
+                                else showToast("Shortlisting noted. Select 'Assessment' to send email.", "info");
+                            }}
                             className="bg-slate-900 text-white px-8 py-4 rounded-2xl font-black text-xs uppercase tracking-[0.2em] flex items-center gap-3 hover:shadow-2xl transition-all shadow-xl active:scale-95"
                         >
                             <span className="material-symbols-outlined text-lg">bolt</span>

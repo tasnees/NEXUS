@@ -106,3 +106,55 @@ def send_interview_email(to_email: str, candidate_name: str, role: str, date: st
     except Exception as e:
         print(f"❌ Failed to send interview email to {to_email}: {e}")
         return False
+def send_status_email(to_email: str, candidate_name: str, status: str, job_title: str):
+    """
+    Sends a Hire or Rejection email.
+    """
+    if not SMTP_USER or not SMTP_PASSWORD:
+        print(f"SMTP credentials missing. Would have sent {status} email to {to_email}.")
+        return False
+
+    try:
+        msg = MIMEMultipart()
+        msg['From'] = SENDER_EMAIL
+        msg['To'] = to_email
+        
+        if status.lower() == "hire":
+            msg['Subject'] = f"🎊 Congratulations! Offer for {job_title} at NEXUS"
+            body = f"""
+            Hello {candidate_name},
+
+            We are thrilled to offer you the position of {job_title} at NEXUS. 
+            Our team was very impressed with your background and performance during the evaluation process.
+
+            We look forward to having you join our team!
+
+            Best regards,
+            The NexHire HR Team
+            """
+        else:
+            msg['Subject'] = f"Update regarding your application for {job_title}"
+            body = f"""
+            Hello {candidate_name},
+
+            Thank you for your interest in the {job_title} position at NEXUS. 
+            After careful review, we have decided to move forward with other candidates at this time.
+
+            We appreciate the time you took to apply and wish you the best in your career.
+
+            Sincerely,
+            The NexHire HR Team
+            """
+
+        msg.attach(MIMEText(body, 'plain'))
+
+        server = smtplib.SMTP(SMTP_SERVER, SMTP_PORT)
+        server.starttls()
+        server.login(SMTP_USER, SMTP_PASSWORD)
+        server.send_message(msg)
+        server.quit()
+        print(f"{status.capitalize()} email successfully sent to {to_email}")
+        return True
+    except Exception as e:
+        print(f"❌ Failed to send {status} email to {to_email}: {e}")
+        return False

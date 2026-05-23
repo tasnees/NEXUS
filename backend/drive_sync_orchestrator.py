@@ -402,6 +402,27 @@ def run_sync():
                         applied_job = job_title # Use official casing
                         break
 
+            # Calculate Score
+            from app.services.screening_service import calculate_screening_score
+            from app.config.database import SessionLocal
+            
+            db_session = SessionLocal()
+            job_obj = None
+            if applied_job != "Uncategorized":
+                from app.models.job import Job
+                job_obj = db_session.query(Job).filter(Job.title == applied_job).first()
+            
+            # Temporary candidate object for scoring
+            from app.models.candidate import Candidate as CandidateModel
+            temp_cand = CandidateModel(
+                skills=profile.skills,
+                experience=profile.experience,
+                raw_text=raw_text
+            )
+            scores = calculate_screening_score(temp_cand, job_obj)
+            overall_score = scores["overall"]
+            db_session.close()
+
             # Build DB payload
             payload = {
                 "drive_file_id": file_id,
@@ -415,6 +436,8 @@ def run_sync():
                 "experience":    profile.experience,
                 "education":     profile.education,
                 "applied_job":   applied_job,
+                "score":         overall_score,
+                "stage":         "Applied"
             }
 
             # If it was in root, move it to its job folder (auto-organization)
